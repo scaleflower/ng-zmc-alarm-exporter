@@ -1,0 +1,130 @@
+# ZMC Alarm Exporter - Docker Compose 配置
+# 用于开发和测试环境
+
+version: '3.8'
+
+services:
+  # ZMC Alarm Exporter 服务
+  zmc-alarm-exporter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: zmc-alarm-exporter
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # 应用配置
+      - DEBUG=false
+
+      # Oracle 数据库配置
+      - ZMC_ORACLE_HOST=${ZMC_ORACLE_HOST:-10.101.1.42}
+      - ZMC_ORACLE_PORT=${ZMC_ORACLE_PORT:-1522}
+      - ZMC_ORACLE_SERVICE_NAME=${ZMC_ORACLE_SERVICE_NAME:-rb}
+      - ZMC_ORACLE_USERNAME=${ZMC_ORACLE_USERNAME:-zmc}
+      - ZMC_ORACLE_PASSWORD=${ZMC_ORACLE_PASSWORD:-smart}
+      - ZMC_ORACLE_POOL_MIN=2
+      - ZMC_ORACLE_POOL_MAX=10
+
+      # Alertmanager 配置
+      - ALERTMANAGER_URL=${ALERTMANAGER_URL:-http://alertmanager:9093}
+      - ALERTMANAGER_TIMEOUT=30
+      - ALERTMANAGER_RETRY_COUNT=3
+
+      # 同步服务配置
+      - SYNC_ENABLED=true
+      - SYNC_SCAN_INTERVAL=${SYNC_SCAN_INTERVAL:-60}
+      - SYNC_BATCH_SIZE=100
+      - SYNC_SYNC_ON_STARTUP=true
+      - SYNC_HISTORY_HOURS=24
+      - SYNC_ALARM_LEVELS=${SYNC_ALARM_LEVELS:-1,2,3,4}
+      - SYNC_SEVERITY_FILTER=${SYNC_SEVERITY_FILTER:-}
+
+      # 告警级别映射
+      - SEVERITY_LEVEL_1=critical
+      - SEVERITY_LEVEL_2=error
+      - SEVERITY_LEVEL_3=warning
+      - SEVERITY_LEVEL_4=info
+
+      # 静默配置
+      - SILENCE_USE_SILENCE_API=true
+      - SILENCE_DEFAULT_DURATION_HOURS=24
+      - SILENCE_AUTO_REMOVE_ON_CLEAR=true
+
+      # 日志配置
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FORMAT=json
+
+      # 静态标签
+      - LABEL_SOURCE=zmc
+      - LABEL_CLUSTER=${LABEL_CLUSTER:-}
+      - LABEL_DATACENTER=${LABEL_DATACENTER:-}
+
+    volumes:
+      - ./logs:/app/logs
+      - ./.env:/app/.env:ro
+    networks:
+      - monitoring
+    depends_on:
+      - alertmanager
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Prometheus Alertmanager
+  alertmanager:
+    image: prom/alertmanager:v0.26.0
+    container_name: alertmanager
+    restart: unless-stopped
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+      - '--cluster.advertise-address=0.0.0.0:9093'
+    networks:
+      - monitoring
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9093/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Prometheus (可选，用于监控 Exporter 自身)
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+    networks:
+      - monitoring
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  monitoring:
+    driver: bridge
+
+volumes:
+  alertmanager-data:
+  prometheus-data:

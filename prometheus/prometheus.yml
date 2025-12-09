@@ -1,0 +1,41 @@
+# Prometheus 配置文件
+# 用于监控 ZMC Alarm Exporter 自身
+
+global:
+  # 抓取间隔
+  scrape_interval: 15s
+  # 评估间隔
+  evaluation_interval: 15s
+  # 外部标签
+  external_labels:
+    monitor: 'zmc-alarm-exporter-monitor'
+
+# Alertmanager 配置
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+# 告警规则文件
+rule_files:
+  # - "rules/*.yml"
+
+# 抓取配置
+scrape_configs:
+  # Prometheus 自身指标
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Alertmanager 指标
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets: ['alertmanager:9093']
+
+  # ZMC Alarm Exporter 指标
+  - job_name: 'zmc-alarm-exporter'
+    static_configs:
+      - targets: ['zmc-alarm-exporter:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 30s

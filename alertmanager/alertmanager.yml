@@ -1,0 +1,114 @@
+# Alertmanager 配置文件
+# 用于开发和测试环境
+
+global:
+  # 告警恢复超时时间
+  resolve_timeout: 5m
+
+  # SMTP 配置 (如果需要邮件通知)
+  # smtp_smarthost: 'smtp.example.com:587'
+  # smtp_from: 'alertmanager@example.com'
+  # smtp_auth_username: 'alertmanager@example.com'
+  # smtp_auth_password: 'password'
+
+# 告警路由配置
+route:
+  # 默认分组方式
+  group_by: ['alertname', 'severity', 'instance']
+
+  # 等待时间，用于批量发送同一组告警
+  group_wait: 30s
+
+  # 同一组告警的发送间隔
+  group_interval: 5m
+
+  # 重复告警的发送间隔
+  repeat_interval: 4h
+
+  # 默认接收器
+  receiver: 'default-receiver'
+
+  # 子路由
+  routes:
+    # Critical 告警优先处理
+    - match:
+        severity: critical
+      receiver: 'critical-receiver'
+      group_wait: 10s
+      repeat_interval: 1h
+
+    # ZMC 告警专用路由
+    - match:
+        source: zmc
+      receiver: 'zmc-receiver'
+      group_by: ['alertname', 'instance', 'alarm_code']
+
+    # OpsGenie 集成路由
+    - match_re:
+        severity: critical|error
+      receiver: 'opsgenie-receiver'
+      continue: true
+
+# 接收器配置
+receivers:
+  # 默认接收器 (仅记录)
+  - name: 'default-receiver'
+    # 可以添加 webhook、email 等配置
+
+  # Critical 告警接收器
+  - name: 'critical-receiver'
+    # webhook_configs:
+    #   - url: 'http://your-webhook-endpoint/critical'
+
+  # ZMC 告警接收器
+  - name: 'zmc-receiver'
+    # webhook_configs:
+    #   - url: 'http://your-webhook-endpoint/zmc'
+
+  # OpsGenie 接收器
+  - name: 'opsgenie-receiver'
+    opsgenie_configs:
+      - api_key: '${OPSGENIE_API_KEY}'
+        # API URL (美区或欧区)
+        api_url: 'https://api.opsgenie.com/'
+        # 消息内容
+        message: '{{ .GroupLabels.alertname }}: {{ .CommonAnnotations.summary }}'
+        # 优先级映射
+        priority: '{{ if eq .GroupLabels.severity "critical" }}P1{{ else if eq .GroupLabels.severity "error" }}P2{{ else if eq .GroupLabels.severity "warning" }}P3{{ else }}P4{{ end }}'
+        # 标签
+        tags: 'zmc,{{ .GroupLabels.severity }}'
+        # 详细描述
+        description: |
+          告警名称: {{ .GroupLabels.alertname }}
+          严重级别: {{ .GroupLabels.severity }}
+          实例: {{ .GroupLabels.instance }}
+          事件ID: {{ .GroupLabels.event_id }}
+
+          {{ .CommonAnnotations.description }}
+
+          处理建议: {{ .CommonAnnotations.runbook }}
+        # 源
+        source: 'ZMC Alarm Exporter'
+        # 响应者
+        # responders:
+        #   - name: 'ops-team'
+        #     type: 'team'
+
+# 抑制规则
+inhibit_rules:
+  # Critical 告警抑制同实例的 Warning 告警
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']
+
+  # Error 告警抑制同实例的 Info 告警
+  - source_match:
+      severity: 'error'
+    target_match:
+      severity: 'info'
+    equal: ['alertname', 'instance']
+
+# 静默规则模板
+# 可以通过 API 或 UI 创建静默规则
