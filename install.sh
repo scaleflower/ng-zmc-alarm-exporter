@@ -626,16 +626,97 @@ init_database() {
         "${VENV_DIR}/bin/python" << PYEOF
 import oracledb
 import sys
+import os
 
-try:
+def try_connect(use_thick=False):
+    """尝试连接数据库"""
     dsn = f"${oracle_host}:${oracle_port}/${oracle_service}"
-    print(f"连接到: {dsn}")
 
-    conn = oracledb.connect(
+    if use_thick:
+        # 尝试初始化 thick 模式
+        # 常见的 Oracle Instant Client 路径
+        lib_paths = [
+            "/usr/lib/oracle/21/client64/lib",
+            "/usr/lib/oracle/19.3/client64/lib",
+            "/usr/lib/oracle/18.5/client64/lib",
+            "/opt/oracle/instantclient_21_1",
+            "/opt/oracle/instantclient_19_8",
+            "/opt/oracle/instantclient",
+            os.environ.get("ORACLE_HOME", "") + "/lib",
+            os.environ.get("LD_LIBRARY_PATH", "").split(":")[0] if os.environ.get("LD_LIBRARY_PATH") else "",
+        ]
+
+        initialized = False
+        for lib_path in lib_paths:
+            if lib_path and os.path.exists(lib_path):
+                try:
+                    oracledb.init_oracle_client(lib_dir=lib_path)
+                    print(f"已启用 thick 模式: {lib_path}")
+                    initialized = True
+                    break
+                except Exception as e:
+                    continue
+
+        if not initialized:
+            # 尝试不指定路径（使用 LD_LIBRARY_PATH）
+            try:
+                oracledb.init_oracle_client()
+                print("已启用 thick 模式 (系统路径)")
+                initialized = True
+            except:
+                pass
+
+        if not initialized:
+            print("警告: 无法初始化 thick 模式，Oracle Instant Client 可能未安装")
+            return None
+
+    print(f"连接到: {dsn} ({'thick' if use_thick else 'thin'} 模式)")
+
+    return oracledb.connect(
         user="${oracle_user}",
         password="${oracle_pass}",
         dsn=dsn
     )
+
+try:
+    conn = None
+
+    # 首先尝试 thin 模式
+    try:
+        conn = try_connect(use_thick=False)
+    except oracledb.DatabaseError as e:
+        error_msg = str(e)
+        # DPY-3015: 密码验证器不支持，需要 thick 模式
+        if "DPY-3015" in error_msg or "password verifier" in error_msg.lower():
+            print("Thin 模式不支持此数据库的密码验证，尝试 thick 模式...")
+            conn = try_connect(use_thick=True)
+            if conn is None:
+                print("")
+                print("=" * 60)
+                print("需要安装 Oracle Instant Client 才能连接此数据库")
+                print("=" * 60)
+                print("")
+                print("安装方法 (CentOS/RHEL):")
+                print("  1. 下载 Oracle Instant Client:")
+                print("     https://www.oracle.com/database/technologies/instant-client/linux-x86-64-downloads.html")
+                print("")
+                print("  2. 安装 RPM 包:")
+                print("     sudo rpm -ivh oracle-instantclient-basic-21.x.x.x.x-1.x86_64.rpm")
+                print("")
+                print("  3. 配置环境变量:")
+                print("     echo '/usr/lib/oracle/21/client64/lib' | sudo tee /etc/ld.so.conf.d/oracle.conf")
+                print("     sudo ldconfig")
+                print("")
+                print("  4. 或者使用 sqlplus 手动初始化数据库:")
+                print(f"     sqlplus ${oracle_user}/****@${oracle_host}:${oracle_port}/${oracle_service} @sql/init_sync_tables.sql")
+                print("")
+                sys.exit(1)
+        else:
+            raise
+
+    if conn is None:
+        print("无法连接到数据库")
+        sys.exit(1)
 
     cursor = conn.cursor()
 
@@ -669,6 +750,7 @@ try:
 
     success_count = 0
     error_count = 0
+    skip_count = 0
 
     for stmt in statements:
         stmt = stmt.strip()
@@ -685,8 +767,8 @@ try:
         except oracledb.DatabaseError as e:
             error_obj, = e.args
             # 忽略"对象已存在"错误
-            if error_obj.code in [955, 2261, 2264, 1430, 1408]:
-                print(f"  [跳过] 对象已存在")
+            if error_obj.code in [955, 2261, 2264, 1430, 1408, 942, 1418]:
+                skip_count += 1
             else:
                 print(f"  [错误] {error_obj.message}")
                 error_count += 1
@@ -695,7 +777,7 @@ try:
     cursor.close()
     conn.close()
 
-    print(f"\n执行完成: {success_count} 成功, {error_count} 错误")
+    print(f"\n执行完成: {success_count} 成功, {skip_count} 跳过(已存在), {error_count} 错误")
 
 except Exception as e:
     print(f"数据库连接失败: {e}")
