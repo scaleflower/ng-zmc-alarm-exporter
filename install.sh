@@ -610,15 +610,16 @@ init_database() {
 
         log_success "数据库初始化完成"
 
-    elif check_command python3 || check_command python; then
-        # 使用 Python 执行
+    elif [ -f "${VENV_DIR}/bin/python" ]; then
+        # 使用虚拟环境中的 Python 执行
         log_info "使用 Python oracledb 初始化数据库..."
 
-        if [ -d "$VENV_DIR" ]; then
-            source "${VENV_DIR}/bin/activate"
+        if ! confirm "确认执行数据库初始化? (将创建新表和配置)"; then
+            log_info "跳过数据库初始化"
+            return 0
         fi
 
-        python3 << PYEOF
+        "${VENV_DIR}/bin/python" << PYEOF
 import oracledb
 import sys
 
