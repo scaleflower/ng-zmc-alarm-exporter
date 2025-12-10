@@ -177,6 +177,63 @@ find_python_cmd() {
     return 1
 }
 
+# 安装 Python
+install_python() {
+    local os=$(detect_os)
+    local pkg_mgr=$(detect_package_manager)
+
+    log_info "正在安装 Python 3.10+..."
+
+    case "$os" in
+        ubuntu|debian)
+            # 添加 deadsnakes PPA 获取新版本 Python
+            sudo apt update
+            sudo apt install -y software-properties-common
+            sudo add-apt-repository -y ppa:deadsnakes/ppa 2>/dev/null || true
+            sudo apt update
+            sudo apt install -y python3.11 python3.11-venv python3.11-dev python3-pip
+            ;;
+        centos|rhel|rocky|almalinux)
+            # CentOS/RHEL 7/8/9
+            if check_command dnf; then
+                # RHEL 8/9, Rocky, AlmaLinux
+                sudo dnf install -y python3.11 python3.11-pip python3.11-devel 2>/dev/null || \
+                sudo dnf install -y python3 python3-pip python3-devel
+            else
+                # CentOS 7
+                sudo yum install -y epel-release
+                sudo yum install -y python3 python3-pip python3-devel
+            fi
+            ;;
+        fedora)
+            sudo dnf install -y python3 python3-pip python3-devel python3-virtualenv
+            ;;
+        macos)
+            if check_command brew; then
+                brew install python@3.11
+            else
+                log_error "请先安装 Homebrew: https://brew.sh"
+                return 1
+            fi
+            ;;
+        *)
+            log_error "不支持的操作系统，请手动安装 Python 3.10+"
+            return 1
+            ;;
+    esac
+
+    # 验证安装
+    local python_cmd
+    python_cmd=$(find_python_cmd)
+    if [ -n "$python_cmd" ]; then
+        log_success "Python 安装成功: $($python_cmd --version)"
+        return 0
+    else
+        log_error "Python 安装失败，请手动安装"
+        return 1
+    fi
+}
+
 # 检查 Python 版本
 check_python_version() {
     log_step "检查 Python 版本..."
@@ -185,25 +242,66 @@ check_python_version() {
     python_cmd=$(find_python_cmd)
 
     if [ -z "$python_cmd" ]; then
-        log_error "未找到 Python 3.10+ 版本"
-        log_info "请先安装 Python 3.10 或更高版本："
+        log_warn "未找到 Python 3.10+ 版本"
 
         local os=$(detect_os)
+        echo ""
+        log_info "系统需要 Python 3.10 或更高版本才能运行此应用"
+        echo ""
+
+        # 显示将要安装的内容
         case "$os" in
             ubuntu|debian)
-                echo "  sudo apt update && sudo apt install python3.10 python3.10-venv python3-pip"
+                echo "  将安装: python3.11, python3.11-venv, python3-pip"
                 ;;
-            centos|rhel)
-                echo "  sudo yum install python310 python310-pip"
+            centos|rhel|rocky|almalinux)
+                echo "  将安装: python3.11 或 python3 (取决于系统版本)"
+                ;;
+            fedora)
+                echo "  将安装: python3, python3-pip, python3-virtualenv"
                 ;;
             macos)
-                echo "  brew install python@3.10"
+                echo "  将安装: python@3.11 (通过 Homebrew)"
                 ;;
             *)
-                echo "  请访问 https://www.python.org/downloads/ 下载安装"
+                echo "  请手动安装 Python 3.10+: https://www.python.org/downloads/"
+                return 1
                 ;;
         esac
-        return 1
+        echo ""
+
+        if confirm "是否自动安装 Python?"; then
+            install_python
+            if [ $? -ne 0 ]; then
+                return 1
+            fi
+            # 重新查找 Python
+            python_cmd=$(find_python_cmd)
+            if [ -z "$python_cmd" ]; then
+                log_error "Python 安装后仍无法找到，请检查 PATH 设置"
+                return 1
+            fi
+        else
+            log_info "请手动安装 Python 后重新运行安装脚本"
+            echo ""
+            echo "手动安装命令："
+            case "$os" in
+                ubuntu|debian)
+                    echo "  sudo apt update && sudo apt install python3.11 python3.11-venv python3-pip"
+                    ;;
+                centos|rhel|rocky|almalinux)
+                    echo "  sudo dnf install python3.11 python3.11-pip  # RHEL 8/9"
+                    echo "  sudo yum install python3 python3-pip        # CentOS 7"
+                    ;;
+                fedora)
+                    echo "  sudo dnf install python3 python3-pip python3-virtualenv"
+                    ;;
+                macos)
+                    echo "  brew install python@3.11"
+                    ;;
+            esac
+            return 1
+        fi
     fi
 
     local version=$($python_cmd --version 2>&1)
