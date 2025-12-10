@@ -121,6 +121,25 @@ init_env() {
         log_warn "Environment file not found: $ENV_FILE"
         log_warn "Using default configuration. Copy .env.example to .env for custom settings."
     fi
+
+    # 设置 Oracle 客户端库路径 (用于 thick 模式，解决 DPY-3015 错误)
+    # 按优先级搜索 Oracle 客户端库
+    local oracle_lib_paths=(
+        "${ZMC_ORACLE_CLIENT_LIB_DIR}"
+        "/soft/oracle/lib"
+        "${ORACLE_HOME}/lib"
+        "/u01/app/oracle/product/19.0.0/dbhome_1/lib"
+        "/opt/oracle/instantclient_19_19"
+        "/opt/oracle/instantclient"
+    )
+
+    for lib_path in "${oracle_lib_paths[@]}"; do
+        if [ -n "$lib_path" ] && [ -f "$lib_path/libclntsh.so" ]; then
+            export LD_LIBRARY_PATH="${lib_path}:${LD_LIBRARY_PATH}"
+            log_info "Oracle client library found: $lib_path"
+            break
+        fi
+    done
 }
 
 # 创建虚拟环境
