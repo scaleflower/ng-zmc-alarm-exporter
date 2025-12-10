@@ -297,36 +297,38 @@ class OracleClient:
         Returns:
             告警列表
         """
+        # 使用兼容 Oracle 11g 的语法（ROWNUM 代替 FETCH FIRST）
         sql = """
-        SELECT
-            e.EVENT_INST_ID, e.EVENT_TIME, e.CREATE_DATE, e.ALARM_CODE,
-            e.ALARM_LEVEL, e.RESET_FLAG, e.TASK_TYPE, e.RES_INST_TYPE,
-            e.RES_INST_ID, e.APP_ENV_ID, e.DETAIL_INFO,
-            e.DATA_1, e.DATA_2, e.DATA_3, e.DATA_4, e.DATA_5,
-            e.DATA_6, e.DATA_7, e.DATA_8, e.DATA_9, e.DATA_10,
-            acl.ALARM_NAME, acl.FAULT_REASON, acl.DEAL_SUGGEST,
-            d.DEVICE_NAME AS HOST_NAME, d.IP_ADDR AS HOST_IP,
-            ae.APP_NAME,
-            sd.DOMAIN_NAME AS BUSINESS_DOMAIN,
-            CASE sd.DOMAIN_TYPE
-                WHEN 'A' THEN 'Production'
-                WHEN 'T' THEN 'Test'
-                WHEN 'D' THEN 'DR'
-                ELSE 'Unknown'
-            END AS ENVIRONMENT
-        FROM NM_ALARM_EVENT e
-        LEFT JOIN NM_ALARM_CODE_LIB acl ON e.ALARM_CODE = acl.ALARM_CODE
-        LEFT JOIN APP_ENV ae ON e.APP_ENV_ID = ae.APP_ENV_ID
-        LEFT JOIN DEVICE d ON ae.DEVICE_ID = d.DEVICE_ID
-        LEFT JOIN SYS_DOMAIN sd ON ae.SYS_DOMAIN_ID = sd.DOMAIN_ID
-        WHERE e.RESET_FLAG = '1'
-          AND NOT EXISTS (
-              SELECT 1 FROM NM_ALARM_SYNC_STATUS s
-              WHERE s.EVENT_INST_ID = e.EVENT_INST_ID
-          )
-          AND e.CREATE_DATE > SYSDATE - INTERVAL :history_hours HOUR
-        ORDER BY e.CREATE_DATE ASC
-        FETCH FIRST :batch_size ROWS ONLY
+        SELECT * FROM (
+            SELECT
+                e.EVENT_INST_ID, e.EVENT_TIME, e.CREATE_DATE, e.ALARM_CODE,
+                e.ALARM_LEVEL, e.RESET_FLAG, e.TASK_TYPE, e.RES_INST_TYPE,
+                e.RES_INST_ID, e.APP_ENV_ID, e.DETAIL_INFO,
+                e.DATA_1, e.DATA_2, e.DATA_3, e.DATA_4, e.DATA_5,
+                e.DATA_6, e.DATA_7, e.DATA_8, e.DATA_9, e.DATA_10,
+                acl.ALARM_NAME, acl.FAULT_REASON, acl.DEAL_SUGGEST,
+                d.DEVICE_NAME AS HOST_NAME, d.IP_ADDR AS HOST_IP,
+                ae.APP_NAME,
+                sd.DOMAIN_NAME AS BUSINESS_DOMAIN,
+                CASE sd.DOMAIN_TYPE
+                    WHEN 'A' THEN 'Production'
+                    WHEN 'T' THEN 'Test'
+                    WHEN 'D' THEN 'DR'
+                    ELSE 'Unknown'
+                END AS ENVIRONMENT
+            FROM NM_ALARM_EVENT e
+            LEFT JOIN NM_ALARM_CODE_LIB acl ON e.ALARM_CODE = acl.ALARM_CODE
+            LEFT JOIN APP_ENV ae ON e.APP_ENV_ID = ae.APP_ENV_ID
+            LEFT JOIN DEVICE d ON ae.DEVICE_ID = d.DEVICE_ID
+            LEFT JOIN SYS_DOMAIN sd ON ae.SYS_DOMAIN_ID = sd.DOMAIN_ID
+            WHERE e.RESET_FLAG = '1'
+              AND NOT EXISTS (
+                  SELECT 1 FROM NM_ALARM_SYNC_STATUS s
+                  WHERE s.EVENT_INST_ID = e.EVENT_INST_ID
+              )
+              AND e.CREATE_DATE > SYSDATE - (:history_hours / 24)
+            ORDER BY e.CREATE_DATE ASC
+        ) WHERE ROWNUM <= :batch_size
         """
         return self.execute_query(sql, {"history_hours": history_hours, "batch_size": batch_size})
 
