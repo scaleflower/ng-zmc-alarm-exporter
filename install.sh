@@ -405,7 +405,11 @@ setup_python_env() {
     # 安装依赖
     if [ -f "$REQUIREMENTS_FILE" ]; then
         log_info "安装 Python 依赖包..."
-        "${VENV_DIR}/bin/pip" install -r "$REQUIREMENTS_FILE" -q
+        if ! "${VENV_DIR}/bin/pip" install -r "$REQUIREMENTS_FILE"; then
+            log_error "Python 依赖安装失败"
+            log_info "请检查 requirements.txt 中的包版本是否正确"
+            return 1
+        fi
         log_success "Python 依赖安装完成"
     else
         log_warn "未找到 requirements.txt 文件"
