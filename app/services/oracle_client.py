@@ -28,6 +28,81 @@ class OracleClient:
         """
         self.config = config or settings.oracle
         self._pool: Optional[oracledb.ConnectionPool] = None
+        self._thick_mode_initialized = False
+
+    def _init_thick_mode(self) -> None:
+        """
+        尝试初始化 Oracle Client thick 模式
+
+        thick 模式需要 Oracle Instant Client 库，用于支持：
+        - 旧版密码加密 (DPY-3015 错误)
+        - 高级安全特性
+        - 某些特定的 Oracle 功能
+        """
+        if self._thick_mode_initialized:
+            return
+
+        # 定义可能的 Oracle 客户端库路径
+        search_paths = []
+
+        # 1. 首先检查配置的路径
+        if self.config.client_lib_dir:
+            search_paths.append(self.config.client_lib_dir)
+
+        # 2. 常见的 Oracle 客户端安装路径
+        search_paths.extend([
+            "/soft/oracle/lib",  # 当前服务器的路径
+            "/u01/app/oracle/product/19.0.0/dbhome_1/lib",
+            "/u01/app/oracle/product/12.2.0/dbhome_1/lib",
+            "/u01/app/oracle/product/12.1.0/dbhome_1/lib",
+            "/u01/app/oracle/product/11.2.0/dbhome_1/lib",
+            "/opt/oracle/instantclient_21_1",
+            "/opt/oracle/instantclient_19_8",
+            "/opt/oracle/instantclient_19_19",
+            "/opt/oracle/instantclient",
+            "/usr/lib/oracle/21/client64/lib",
+            "/usr/lib/oracle/19.8/client64/lib",
+            "/usr/lib/oracle/12.2/client64/lib",
+        ])
+
+        # 3. 检查环境变量
+        import os
+        oracle_home = os.environ.get("ORACLE_HOME")
+        if oracle_home:
+            search_paths.insert(0, f"{oracle_home}/lib")
+
+        ld_library_path = os.environ.get("LD_LIBRARY_PATH", "")
+        for path in ld_library_path.split(":"):
+            if path and "oracle" in path.lower():
+                search_paths.insert(0, path)
+
+        # 尝试每个路径
+        for lib_dir in search_paths:
+            if not lib_dir:
+                continue
+            try:
+                import os.path
+                # 检查目录是否存在且包含 libclntsh.so
+                if os.path.isdir(lib_dir):
+                    libclntsh_path = os.path.join(lib_dir, "libclntsh.so")
+                    if os.path.exists(libclntsh_path):
+                        oracledb.init_oracle_client(lib_dir=lib_dir)
+                        self._thick_mode_initialized = True
+                        logger.info(f"Oracle thick mode initialized with client lib: {lib_dir}")
+                        return
+            except oracledb.ProgrammingError as e:
+                if "already initialized" in str(e).lower():
+                    self._thick_mode_initialized = True
+                    logger.info("Oracle thick mode was already initialized")
+                    return
+                logger.debug(f"Failed to init thick mode with {lib_dir}: {e}")
+            except Exception as e:
+                logger.debug(f"Failed to init thick mode with {lib_dir}: {e}")
+
+        logger.warning(
+            "Oracle thick mode not available. If you encounter DPY-3015 errors, "
+            "please set ZMC_ORACLE_CLIENT_LIB_DIR to your Oracle Instant Client path"
+        )
 
     def init_pool(self) -> None:
         """初始化连接池"""
@@ -38,12 +113,8 @@ class OracleClient:
             f"Initializing Oracle connection pool: {self.config.host}:{self.config.port}/{self.config.service_name}"
         )
 
-        try:
-            # 使用 thin 模式，无需 Oracle Client
-            oracledb.init_oracle_client()
-        except Exception:
-            # thin 模式不需要初始化 client
-            pass
+        # 尝试启用 thick 模式以支持旧版密码加密
+        self._init_thick_mode()
 
         self._pool = oracledb.create_pool(
             user=self.config.username,

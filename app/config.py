@@ -28,6 +28,9 @@ class OracleConfig(BaseSettings):
     pool_min: int = Field(default=2, description="连接池最小连接数")
     pool_max: int = Field(default=10, description="连接池最大连接数")
     timeout: int = Field(default=30, description="连接超时(秒)")
+    # Oracle Instant Client 库路径，用于启用 thick 模式
+    # 如果数据库使用旧版密码加密(DPY-3015错误)，需要设置此路径
+    client_lib_dir: Optional[str] = Field(default=None, description="Oracle Instant Client库路径")
 
     @property
     def dsn(self) -> str:
