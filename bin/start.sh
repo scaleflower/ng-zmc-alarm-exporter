@@ -122,24 +122,33 @@ init_env() {
         log_warn "Using default configuration. Copy .env.example to .env for custom settings."
     fi
 
-    # 设置 Oracle 客户端库路径 (用于 thick 模式，解决 DPY-3015 错误)
-    # 按优先级搜索 Oracle 客户端库
-    local oracle_lib_paths=(
-        "${ZMC_ORACLE_CLIENT_LIB_DIR}"
-        "/soft/oracle/lib"
-        "${ORACLE_HOME}/lib"
-        "/u01/app/oracle/product/19.0.0/dbhome_1/lib"
+    # 设置 Oracle 环境 (用于 thick 模式，解决 DPY-3015 错误)
+    # 按优先级搜索 Oracle 安装目录
+    local oracle_home_paths=(
+        "${ORACLE_HOME}"
+        "/soft/oracle"
+        "/u01/app/oracle/product/19.0.0/dbhome_1"
+        "/u01/app/oracle/product/12.2.0/dbhome_1"
         "/opt/oracle/instantclient_19_19"
         "/opt/oracle/instantclient"
     )
 
-    for lib_path in "${oracle_lib_paths[@]}"; do
-        if [ -n "$lib_path" ] && [ -f "$lib_path/libclntsh.so" ]; then
-            export LD_LIBRARY_PATH="${lib_path}:${LD_LIBRARY_PATH}"
-            log_info "Oracle client library found: $lib_path"
+    for oracle_path in "${oracle_home_paths[@]}"; do
+        if [ -n "$oracle_path" ] && [ -f "$oracle_path/lib/libclntsh.so" ]; then
+            export ORACLE_HOME="$oracle_path"
+            export LD_LIBRARY_PATH="${oracle_path}/lib:${LD_LIBRARY_PATH}"
+            # 设置 NLS_LANG 以避免字符集问题
+            export NLS_LANG="${NLS_LANG:-AMERICAN_AMERICA.AL32UTF8}"
+            log_info "Oracle environment configured: ORACLE_HOME=$oracle_path"
             break
         fi
     done
+
+    # 如果配置了自定义客户端库路径，也添加到 LD_LIBRARY_PATH
+    if [ -n "${ZMC_ORACLE_CLIENT_LIB_DIR}" ] && [ -d "${ZMC_ORACLE_CLIENT_LIB_DIR}" ]; then
+        export LD_LIBRARY_PATH="${ZMC_ORACLE_CLIENT_LIB_DIR}:${LD_LIBRARY_PATH}"
+        log_info "Custom Oracle client library added: ${ZMC_ORACLE_CLIENT_LIB_DIR}"
+    fi
 }
 
 # 创建虚拟环境
