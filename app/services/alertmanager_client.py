@@ -44,7 +44,9 @@ class AlertmanagerClient:
                 headers={
                     "Content-Type": "application/json",
                     "User-Agent": "zmc-alarm-exporter/1.0"
-                }
+                },
+                # 禁用代理，直接连接 Alertmanager（不从环境变量读取代理）
+                trust_env=False
             )
         return self._client
 

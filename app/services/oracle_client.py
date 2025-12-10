@@ -333,13 +333,24 @@ class OracleClient:
         return self.execute_query(sql, {"history_hours": history_hours, "batch_size": batch_size})
 
     def get_status_changed_alarms(self) -> List[Dict]:
-        """获取状态变更的告警"""
+        """
+        获取状态变更的告警
+
+        检测两种场景：
+        1. NM_ALARM_CDR.ALARM_STATE 变更 (ZMC 告警汇总状态变更)
+        2. NM_ALARM_EVENT.RESET_FLAG 从 '1' 变为 '0' (告警恢复/清除)
+        """
         sql = """
         SELECT
             s.SYNC_ID, s.EVENT_INST_ID, s.ALARM_INST_ID, s.SYNC_STATUS,
             s.ZMC_ALARM_STATE AS OLD_ZMC_STATE, s.SILENCE_ID,
-            c.ALARM_STATE AS NEW_ZMC_STATE,
-            c.RESET_DATE, c.CLEAR_DATE, c.CONFIRM_DATE, c.CLEAR_REASON,
+            CASE
+                WHEN e.RESET_FLAG = '0' OR TRIM(e.RESET_FLAG) = '0' THEN 'C'
+                WHEN c.ALARM_STATE IS NOT NULL THEN c.ALARM_STATE
+                ELSE 'U'
+            END AS NEW_ZMC_STATE,
+            NVL(c.RESET_DATE, SYSDATE) AS RESET_DATE,
+            c.CLEAR_DATE, c.CONFIRM_DATE, c.CLEAR_REASON,
             e.ALARM_CODE, e.ALARM_LEVEL, e.EVENT_TIME, e.DETAIL_INFO,
             acl.ALARM_NAME,
             d.DEVICE_NAME AS HOST_NAME, d.IP_ADDR AS HOST_IP,
@@ -355,8 +366,12 @@ class OracleClient:
         LEFT JOIN DEVICE d ON ae.DEVICE_ID = d.DEVICE_ID
         LEFT JOIN SYS_DOMAIN sd ON ae.SYS_DOMAIN_ID = sd.DOMAIN_ID
         WHERE s.SYNC_STATUS IN ('FIRING', 'PENDING')
-          AND c.ALARM_STATE IS NOT NULL
-          AND c.ALARM_STATE != NVL(s.ZMC_ALARM_STATE, 'U')
+          AND (
+              -- 场景1: RESET_FLAG 变为 0 (告警已恢复/清除)
+              (e.RESET_FLAG = '0' OR TRIM(e.RESET_FLAG) = '0')
+              -- 场景2: NM_ALARM_CDR 状态变更
+              OR (c.ALARM_STATE IS NOT NULL AND c.ALARM_STATE != NVL(s.ZMC_ALARM_STATE, 'U'))
+          )
         """
         return self.execute_query(sql)
 

@@ -123,10 +123,20 @@ class PrometheusAlert(BaseModel):
 
     @staticmethod
     def _format_time(dt: datetime) -> str:
-        """格式化时间为RFC3339格式"""
+        """
+        格式化时间为RFC3339格式
+
+        注意：Oracle 数据库返回的时间是北京时间（UTC+8），没有时区信息。
+        我们需要将其正确转换为 UTC 时间后再格式化。
+        """
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.isoformat()
+            # 假设无时区时间为北京时间 (UTC+8)
+            from datetime import timedelta
+            cst = timezone(timedelta(hours=8))
+            dt = dt.replace(tzinfo=cst)
+        # 转换为 UTC 时间并格式化
+        dt_utc = dt.astimezone(timezone.utc)
+        return dt_utc.isoformat()
 
     def to_dict(self) -> dict:
         """转换为API请求格式的字典"""
@@ -254,10 +264,20 @@ class PrometheusSilence(BaseModel):
 
     @staticmethod
     def _format_time(dt: datetime) -> str:
-        """格式化时间为RFC3339格式"""
+        """
+        格式化时间为RFC3339格式
+
+        注意：Oracle 数据库返回的时间是北京时间（UTC+8），没有时区信息。
+        我们需要将其正确转换为 UTC 时间后再格式化。
+        """
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.isoformat()
+            # 假设无时区时间为北京时间 (UTC+8)
+            from datetime import timedelta
+            cst = timezone(timedelta(hours=8))
+            dt = dt.replace(tzinfo=cst)
+        # 转换为 UTC 时间并格式化
+        dt_utc = dt.astimezone(timezone.utc)
+        return dt_utc.isoformat()
 
     def to_dict(self) -> dict:
         """转换为API请求格式的字典"""
