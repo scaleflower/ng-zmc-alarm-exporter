@@ -155,10 +155,8 @@ detect_package_manager() {
 # 依赖检查和安装
 # ============================================================================
 
-# 检查 Python 版本
-check_python_version() {
-    log_step "检查 Python 版本..."
-
+# 查找可用的 Python 命令 (仅返回命令路径，不输出日志)
+find_python_cmd() {
     local python_cmd=""
 
     # 检查可用的 Python 命令
@@ -169,12 +167,22 @@ check_python_version() {
                 local major=$(echo "$version" | cut -d. -f1)
                 local minor=$(echo "$version" | cut -d. -f2)
                 if [ "$major" -ge 3 ] && [ "$minor" -ge 10 ]; then
-                    python_cmd="$cmd"
-                    break
+                    echo "$cmd"
+                    return 0
                 fi
             fi
         fi
     done
+
+    return 1
+}
+
+# 检查 Python 版本
+check_python_version() {
+    log_step "检查 Python 版本..."
+
+    local python_cmd
+    python_cmd=$(find_python_cmd)
 
     if [ -z "$python_cmd" ]; then
         log_error "未找到 Python 3.10+ 版本"
@@ -200,7 +208,10 @@ check_python_version() {
 
     local version=$($python_cmd --version 2>&1)
     log_success "找到 Python: $version ($python_cmd)"
-    echo "$python_cmd"
+
+    # 将结果保存到全局变量而不是 echo
+    PYTHON_CMD="$python_cmd"
+    return 0
 }
 
 # 安装系统依赖
@@ -261,30 +272,42 @@ install_system_deps() {
 setup_python_env() {
     log_step "设置 Python 虚拟环境..."
 
-    local python_cmd=$(check_python_version)
-    if [ $? -ne 0 ]; then
+    # 检查 Python 版本，结果保存在全局变量 PYTHON_CMD
+    check_python_version
+    if [ $? -ne 0 ] || [ -z "$PYTHON_CMD" ]; then
         return 1
     fi
+
+    local python_cmd="$PYTHON_CMD"
 
     # 创建虚拟环境
     if [ ! -d "$VENV_DIR" ]; then
         log_info "创建虚拟环境: $VENV_DIR"
-        $python_cmd -m venv "$VENV_DIR"
+        "$python_cmd" -m venv "$VENV_DIR"
+        if [ $? -ne 0 ]; then
+            log_error "创建虚拟环境失败"
+            return 1
+        fi
     else
         log_info "虚拟环境已存在: $VENV_DIR"
     fi
 
     # 激活虚拟环境
-    source "${VENV_DIR}/bin/activate"
+    if [ -f "${VENV_DIR}/bin/activate" ]; then
+        source "${VENV_DIR}/bin/activate"
+    else
+        log_error "虚拟环境激活脚本不存在: ${VENV_DIR}/bin/activate"
+        return 1
+    fi
 
     # 升级 pip
     log_info "升级 pip..."
-    pip install --upgrade pip -q
+    "${VENV_DIR}/bin/pip" install --upgrade pip -q
 
     # 安装依赖
     if [ -f "$REQUIREMENTS_FILE" ]; then
         log_info "安装 Python 依赖包..."
-        pip install -r "$REQUIREMENTS_FILE" -q
+        "${VENV_DIR}/bin/pip" install -r "$REQUIREMENTS_FILE" -q
         log_success "Python 依赖安装完成"
     else
         log_warn "未找到 requirements.txt 文件"
@@ -292,7 +315,7 @@ setup_python_env() {
 
     # 显示已安装的主要包
     log_info "已安装的主要包:"
-    pip list | grep -E "^(fastapi|uvicorn|oracledb|httpx|prometheus)" || true
+    "${VENV_DIR}/bin/pip" list | grep -E "^(fastapi|uvicorn|oracledb|httpx|prometheus)" || true
 }
 
 # ============================================================================
