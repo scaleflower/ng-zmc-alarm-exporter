@@ -126,17 +126,17 @@ class AlarmExtractor:
 
     def create_sync_status(
         self,
-        event_inst_id: int,
-        alarm_inst_id: Optional[int],
+        alarm_inst_id: int,
+        event_inst_id: Optional[int],
         sync_status: str,
         zmc_alarm_state: Optional[str]
     ) -> bool:
         """
-        创建同步状态记录
+        创建同步状态记录（以 ALARM_INST_ID 为核心）
 
         Args:
-            event_inst_id: 告警事件ID
-            alarm_inst_id: 告警汇总ID
+            alarm_inst_id: 告警汇总ID（必填，作为唯一标识）
+            event_inst_id: 告警事件ID（可选）
             sync_status: 同步状态
             zmc_alarm_state: ZMC告警状态
 
@@ -145,14 +145,14 @@ class AlarmExtractor:
         """
         try:
             self.db.insert_sync_status(
-                event_inst_id=event_inst_id,
                 alarm_inst_id=alarm_inst_id,
+                event_inst_id=event_inst_id,
                 sync_status=sync_status,
                 zmc_alarm_state=zmc_alarm_state
             )
             return True
         except Exception as e:
-            logger.error(f"Failed to create sync status for event {event_inst_id}: {e}")
+            logger.error(f"Failed to create sync status for alarm {alarm_inst_id}: {e}")
             return False
 
     def update_sync_status(
@@ -266,16 +266,25 @@ class AlarmExtractor:
         """
         将数据库行转换为告警对象
 
+        支持新架构（以 NM_ALARM_CDR 为核心）和旧架构的字段映射
+
         Args:
             row: 数据库查询结果行
 
         Returns:
             告警对象
         """
+        # 处理日期字段兼容性（新架构使用 cdr_create_date / event_create_date）
+        create_date = (
+            row.get("create_date") or
+            row.get("event_create_date") or
+            row.get("cdr_create_date")
+        )
+
         return ZMCAlarm(
-            event_inst_id=row["event_inst_id"],
+            event_inst_id=row.get("event_inst_id") or 0,  # 新架构中可能为空
             event_time=row.get("event_time"),
-            create_date=row.get("create_date"),
+            create_date=create_date,
             alarm_code=row["alarm_code"],
             alarm_level=row.get("alarm_level"),
             reset_flag=row.get("reset_flag", "1"),

@@ -108,18 +108,18 @@ class SyncService:
                 result = await self.am_client.push_alerts(alerts_to_push)
 
                 if result["success"]:
-                    # 5. 更新同步状态
+                    # 5. 更新同步状态（以 ALARM_INST_ID 为核心）
                     for alarm, alert in prometheus_alerts:
                         try:
                             self.extractor.create_sync_status(
-                                event_inst_id=alarm.event_inst_id,
                                 alarm_inst_id=alarm.alarm_inst_id,
+                                event_inst_id=alarm.event_inst_id,
                                 sync_status="FIRING",
                                 zmc_alarm_state=alarm.alarm_state or "U"
                             )
                             stats["pushed"] += 1
                         except Exception as e:
-                            logger.error(f"Failed to create sync status for {alarm.event_inst_id}: {e}")
+                            logger.error(f"Failed to create sync status for alarm {alarm.alarm_inst_id}: {e}")
                             stats["errors"] += 1
 
                     # 记录日志
@@ -262,11 +262,13 @@ class SyncService:
 
             for alarm_data in heartbeat_alarms:
                 try:
-                    # 创建简化的告警对象
+                    # 创建简化的告警对象（支持新架构）
                     alarm = ZMCAlarm(
-                        event_inst_id=alarm_data["event_inst_id"],
+                        event_inst_id=alarm_data.get("event_inst_id") or 0,
+                        alarm_inst_id=alarm_data.get("alarm_inst_id"),
                         alarm_code=alarm_data["alarm_code"],
                         alarm_level=alarm_data.get("alarm_level"),
+                        alarm_state=alarm_data.get("alarm_state", "U"),
                         reset_flag="1",
                         event_time=alarm_data.get("event_time"),
                         detail_info=alarm_data.get("detail_info"),
@@ -283,7 +285,7 @@ class SyncService:
                     alarm_sync_ids.append(alarm_data["sync_id"])
 
                 except Exception as e:
-                    logger.error(f"Failed to prepare heartbeat for {alarm_data.get('event_inst_id')}: {e}")
+                    logger.error(f"Failed to prepare heartbeat for alarm {alarm_data.get('alarm_inst_id')}: {e}")
                     stats["errors"] += 1
 
             # 批量推送
