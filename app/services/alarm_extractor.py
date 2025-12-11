@@ -67,6 +67,31 @@ class AlarmExtractor:
         logger.info(f"Found {len(rows)} alarms with status changes")
         return rows
 
+    def extract_refired_alarms(
+        self,
+        batch_size: Optional[int] = None
+    ) -> List[dict]:
+        """
+        抽取重新触发的告警（曾经恢复但又重新变为活跃的告警）
+
+        用于解决历史告警重复出现时漏报的问题：
+        - SYNC_STATUS = 'RESOLVED' 但 ALARM_STATE = 'U'
+
+        Args:
+            batch_size: 批处理大小
+
+        Returns:
+            重新触发的告警列表
+        """
+        batch_size = batch_size or settings.sync.batch_size
+
+        logger.info(f"Extracting refired alarms (batch: {batch_size})")
+
+        rows = self.db.get_refired_alarms(batch_size)
+
+        logger.info(f"Found {len(rows)} refired alarms")
+        return rows
+
     def extract_heartbeat_alarms(
         self,
         heartbeat_interval: Optional[int] = None

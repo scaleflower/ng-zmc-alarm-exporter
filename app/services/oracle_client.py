@@ -414,6 +414,117 @@ class OracleClient:
         # 因为 NM_ALARM_CDR.ALARM_STATE = 'U' 已经表示告警仍然活跃
         return self.get_active_alarms(batch_size=batch_size)
 
+    def get_refired_alarms(self, batch_size: int = 100) -> List[Dict]:
+        """
+        获取重新触发的告警（基于 NM_ALARM_CDR）
+
+        检测曾经同步过但已恢复，现在又重新变为活跃状态的告警：
+        - SYNC_STATUS = 'RESOLVED' 但 ALARM_STATE = 'U'
+
+        这解决了历史告警重复出现时漏报的问题。
+        """
+        sql = """
+        SELECT * FROM (
+            SELECT
+                -- 同步状态信息
+                s.SYNC_ID,
+                s.ALARM_INST_ID,
+                s.EVENT_INST_ID AS OLD_EVENT_INST_ID,
+                s.SYNC_STATUS,
+                s.ZMC_ALARM_STATE AS OLD_ZMC_STATE,
+                s.PUSH_COUNT,
+
+                -- 告警汇总信息（核心）
+                c.ALARM_CODE,
+                c.APP_ENV_ID,
+                c.RES_INST_ID,
+                c.ALARM_STATE AS NEW_ZMC_STATE,
+                c.ALARM_LEVEL,
+                c.TOTAL_ALARM,
+                c.CREATE_DATE AS CDR_CREATE_DATE,
+                c.RESET_DATE,
+                c.CLEAR_DATE,
+                c.CONFIRM_DATE,
+                c.CLEAR_REASON,
+
+                -- 最新告警事件详情
+                e.EVENT_INST_ID,
+                e.EVENT_TIME,
+                e.CREATE_DATE AS EVENT_CREATE_DATE,
+                e.DETAIL_INFO,
+                e.DATA_1, e.DATA_2, e.DATA_3, e.DATA_4, e.DATA_5,
+                e.DATA_6, e.DATA_7, e.DATA_8, e.DATA_9, e.DATA_10,
+                e.TASK_TYPE,
+                e.RES_INST_TYPE,
+
+                -- 告警码详情
+                acl.ALARM_NAME,
+                acl.FAULT_REASON,
+                acl.DEAL_SUGGEST,
+                acl.WARN_LEVEL AS DEFAULT_WARN_LEVEL,
+
+                -- 主机信息
+                d.DEVICE_ID,
+                d.DEVICE_NAME AS HOST_NAME,
+                d.IP_ADDR AS HOST_IP,
+                d.DEVICE_MODEL,
+
+                -- 应用信息
+                ae.APP_NAME,
+                ae.USERNAME AS APP_USER,
+
+                -- 业务域信息
+                sd.DOMAIN_ID,
+                sd.DOMAIN_NAME AS BUSINESS_DOMAIN,
+                sd.DOMAIN_TYPE,
+                CASE sd.DOMAIN_TYPE
+                    WHEN 'A' THEN 'Production'
+                    WHEN 'T' THEN 'Test'
+                    WHEN 'D' THEN 'DR'
+                    ELSE 'Unknown'
+                END AS ENVIRONMENT
+
+            FROM NM_ALARM_SYNC_STATUS s
+
+            -- 关联告警汇总表（核心）
+            JOIN NM_ALARM_CDR c ON s.ALARM_INST_ID = c.ALARM_INST_ID
+
+            -- 获取该告警的最新事件记录
+            LEFT JOIN (
+                SELECT e1.*
+                FROM NM_ALARM_EVENT e1
+                WHERE e1.EVENT_INST_ID = (
+                    SELECT MAX(e2.EVENT_INST_ID)
+                    FROM NM_ALARM_EVENT e2
+                    WHERE e2.ALARM_CODE = e1.ALARM_CODE
+                      AND e2.APP_ENV_ID = e1.APP_ENV_ID
+                      AND e2.RES_INST_ID = e1.RES_INST_ID
+                      AND e2.RESET_FLAG = '1'
+                )
+            ) e ON c.ALARM_CODE = e.ALARM_CODE
+                AND c.APP_ENV_ID = e.APP_ENV_ID
+                AND c.RES_INST_ID = e.RES_INST_ID
+
+            -- 关联告警码库
+            LEFT JOIN NM_ALARM_CODE_LIB acl ON c.ALARM_CODE = acl.ALARM_CODE
+
+            -- 关联应用环境
+            LEFT JOIN APP_ENV ae ON c.APP_ENV_ID = ae.APP_ENV_ID
+
+            -- 关联设备表
+            LEFT JOIN DEVICE d ON ae.DEVICE_ID = d.DEVICE_ID
+
+            -- 关联业务域表
+            LEFT JOIN SYS_DOMAIN sd ON ae.SYS_DOMAIN_ID = sd.DOMAIN_ID
+
+            WHERE s.SYNC_STATUS = 'RESOLVED'           -- 之前已恢复
+              AND s.ZMC_ALARM_STATE IN ('A', 'C', 'M') -- 确实是从非活跃状态
+              AND c.ALARM_STATE = 'U'                  -- 但现在又活跃了
+            ORDER BY c.CREATE_DATE ASC
+        ) WHERE ROWNUM <= :batch_size
+        """
+        return self.execute_query(sql, {"batch_size": batch_size})
+
     def get_status_changed_alarms(self) -> List[Dict]:
         """
         获取状态变更的告警（基于 NM_ALARM_CDR）

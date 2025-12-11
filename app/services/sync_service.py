@@ -156,6 +156,132 @@ class SyncService:
         logger.info(f"sync_new_alarms completed: {stats}")
         return stats
 
+    async def sync_refired_alarms(self, batch_id: Optional[str] = None) -> dict:
+        """
+        同步重新触发的告警（曾经恢复但又重新变为活跃的告警）
+
+        这解决了历史告警重复出现时漏报的问题。
+
+        Returns:
+            同步结果统计
+        """
+        batch_id = batch_id or self.generate_batch_id()
+        stats = {
+            "batch_id": batch_id,
+            "detected": 0,
+            "pushed": 0,
+            "errors": 0
+        }
+
+        logger.info(f"Starting sync_refired_alarms, batch_id: {batch_id}")
+
+        try:
+            # 1. 抽取重新触发的告警
+            refired_alarms = self.extractor.extract_refired_alarms()
+            stats["detected"] = len(refired_alarms)
+
+            if not refired_alarms:
+                logger.debug("No refired alarms detected")
+                return stats
+
+            # 2. 转换为 Prometheus 格式并推送
+            for alarm_data in refired_alarms:
+                try:
+                    sync_id = alarm_data["sync_id"]
+                    alarm_inst_id = alarm_data["alarm_inst_id"]
+                    old_state = alarm_data.get("old_zmc_state")
+                    new_state = alarm_data.get("new_zmc_state", "U")
+                    total_alarm = alarm_data.get("total_alarm", 1)
+
+                    logger.info(
+                        f"Processing refired alarm: alarm_inst_id={alarm_inst_id}, "
+                        f"state={old_state}->{new_state}, total_alarm={total_alarm}"
+                    )
+
+                    # 构建告警对象
+                    alarm = self._build_alarm_from_data(alarm_data)
+
+                    # 转换为 Prometheus 格式
+                    alert = self.transformer.transform_to_prometheus(alarm, resolved=False)
+
+                    # 推送到 Alertmanager
+                    result = await self.am_client.push_single_alert(alert)
+
+                    if result["success"]:
+                        # 更新同步状态：从 RESOLVED 变回 FIRING
+                        self.extractor.update_sync_status(
+                            sync_id=sync_id,
+                            sync_status="FIRING",
+                            zmc_alarm_state=new_state
+                        )
+                        stats["pushed"] += 1
+
+                        self.extractor.log_sync_operation(
+                            operation="PUSH_REFIRED",
+                            event_inst_id=alarm_data.get("event_inst_id"),
+                            sync_batch_id=batch_id,
+                            old_status="RESOLVED",
+                            new_status="FIRING",
+                            request_url=self.am_client.config.alerts_url,
+                            request_method="POST",
+                            response_code=result.get("status_code"),
+                            duration_ms=result.get("duration_ms")
+                        )
+
+                        logger.info(f"Refired alarm {alarm_inst_id} pushed successfully")
+                    else:
+                        self.extractor.record_sync_error(sync_id, result.get("error", "Unknown error"))
+                        stats["errors"] += 1
+
+                except Exception as e:
+                    logger.error(f"Failed to process refired alarm: {e}")
+                    stats["errors"] += 1
+
+        except Exception as e:
+            logger.error(f"sync_refired_alarms failed: {e}")
+            stats["errors"] += 1
+
+        logger.info(f"sync_refired_alarms completed: {stats}")
+        return stats
+
+    def _build_alarm_from_data(self, alarm_data: dict) -> ZMCAlarm:
+        """从数据库行数据构建告警对象"""
+        return ZMCAlarm(
+            event_inst_id=alarm_data.get("event_inst_id") or 0,
+            alarm_inst_id=alarm_data.get("alarm_inst_id"),
+            alarm_code=alarm_data["alarm_code"],
+            alarm_level=alarm_data.get("alarm_level"),
+            alarm_state=alarm_data.get("new_zmc_state") or alarm_data.get("alarm_state", "U"),
+            reset_flag="1",
+            event_time=alarm_data.get("event_time"),
+            create_date=alarm_data.get("event_create_date") or alarm_data.get("cdr_create_date"),
+            detail_info=alarm_data.get("detail_info"),
+            data_1=alarm_data.get("data_1"),
+            data_2=alarm_data.get("data_2"),
+            data_3=alarm_data.get("data_3"),
+            data_4=alarm_data.get("data_4"),
+            data_5=alarm_data.get("data_5"),
+            data_6=alarm_data.get("data_6"),
+            data_7=alarm_data.get("data_7"),
+            data_8=alarm_data.get("data_8"),
+            data_9=alarm_data.get("data_9"),
+            data_10=alarm_data.get("data_10"),
+            total_alarm=alarm_data.get("total_alarm"),
+            alarm_name=alarm_data.get("alarm_name"),
+            fault_reason=alarm_data.get("fault_reason"),
+            deal_suggest=alarm_data.get("deal_suggest"),
+            default_warn_level=alarm_data.get("default_warn_level"),
+            host_name=alarm_data.get("host_name"),
+            host_ip=alarm_data.get("host_ip"),
+            device_model=alarm_data.get("device_model"),
+            app_name=alarm_data.get("app_name"),
+            app_user=alarm_data.get("app_user"),
+            business_domain=alarm_data.get("business_domain"),
+            environment=alarm_data.get("environment"),
+            res_inst_id=alarm_data.get("res_inst_id"),
+            app_env_id=alarm_data.get("app_env_id"),
+        )
+
     async def sync_status_changes(self, batch_id: Optional[str] = None) -> dict:
         """
         同步状态变更的告警
@@ -565,6 +691,7 @@ class SyncService:
         results = {
             "batch_id": batch_id,
             "new_alarms": {},
+            "refired_alarms": {},
             "status_changes": {},
             "heartbeat": {},
             "silences_cleanup": {}
@@ -574,16 +701,19 @@ class SyncService:
             # 1. 同步新告警
             results["new_alarms"] = await self.sync_new_alarms(batch_id)
 
-            # 2. 同步状态变更
+            # 2. 同步重新触发的告警（曾经恢复但又重新变为活跃的告警）
+            results["refired_alarms"] = await self.sync_refired_alarms(batch_id)
+
+            # 3. 同步状态变更
             results["status_changes"] = await self.sync_status_changes(batch_id)
 
-            # 3. 心跳保活（仅在启用时执行）
+            # 4. 心跳保活（仅在启用时执行）
             if settings.sync.heartbeat_enabled:
                 results["heartbeat"] = await self.sync_heartbeat(batch_id)
             else:
                 results["heartbeat"] = {"skipped": True, "reason": "heartbeat_enabled=False"}
 
-            # 4. 清理静默
+            # 5. 清理静默
             results["silences_cleanup"] = await self.cleanup_silences(batch_id)
 
         except Exception as e:
