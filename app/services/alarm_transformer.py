@@ -107,12 +107,23 @@ class AlarmTransformer:
         # 构建注解
         annotations = self._build_annotations(alarm)
 
-        # 确定告警开始时间
-        starts_at = alarm.event_time or alarm.create_date or datetime.now(timezone.utc)
+        # 确定告警开始时间（使用本地时区，不转换为UTC）
+        starts_at = alarm.event_time or alarm.create_date or datetime.now()
 
         if resolved:
             # 恢复告警：设置结束时间
-            ends_at = resolved_at or alarm.get_resolved_time() or datetime.now(timezone.utc)
+            ends_at = resolved_at or alarm.get_resolved_time() or datetime.now()
+
+            # 确保 startsAt < endsAt，Alertmanager 要求开始时间必须早于结束时间
+            # 如果因为时区或数据问题导致 starts_at >= ends_at，则调整 starts_at
+            if starts_at >= ends_at:
+                # 将开始时间设为结束时间前1秒
+                starts_at = ends_at - timedelta(seconds=1)
+                logger.warning(
+                    f"Adjusted startsAt for alarm {alarm.event_inst_id}: "
+                    f"original event_time >= resolved_time, set startsAt to {starts_at}"
+                )
+
             return PrometheusAlert.create_resolved(
                 alertname=labels.pop("alertname"),
                 instance=labels.pop("instance"),

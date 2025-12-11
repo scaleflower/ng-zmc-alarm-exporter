@@ -189,8 +189,21 @@ class SyncService:
                     new_state = alarm_data.get("new_zmc_state")
                     sync_id = alarm_data["sync_id"]
                     event_inst_id = alarm_data["event_inst_id"]
+                    push_count = alarm_data.get("push_count", 0) or 0
 
-                    logger.info(f"Processing status change: event={event_inst_id}, {old_state} -> {new_state}")
+                    logger.info(f"Processing status change: event={event_inst_id}, {old_state} -> {new_state}, push_count={push_count}")
+
+                    # 如果告警从未被推送过（push_count=0），则跳过推送，直接更新状态
+                    # 这些是历史告警，在同步服务启动前就已经恢复了
+                    if push_count == 0:
+                        logger.info(f"Skipping alarm {event_inst_id}: never pushed before, directly mark as RESOLVED")
+                        self.extractor.update_sync_status(
+                            sync_id=sync_id,
+                            sync_status="RESOLVED",
+                            zmc_alarm_state=new_state
+                        )
+                        stats["resolved"] += 1
+                        continue
 
                     # 根据新状态决定操作
                     if new_state in ("A", "C"):

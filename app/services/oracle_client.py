@@ -344,6 +344,7 @@ class OracleClient:
         SELECT
             s.SYNC_ID, s.EVENT_INST_ID, s.ALARM_INST_ID, s.SYNC_STATUS,
             s.ZMC_ALARM_STATE AS OLD_ZMC_STATE, s.SILENCE_ID,
+            s.PUSH_COUNT,
             CASE
                 WHEN e.RESET_FLAG = '0' OR TRIM(e.RESET_FLAG) = '0' THEN 'C'
                 WHEN c.ALARM_STATE IS NOT NULL THEN c.ALARM_STATE
