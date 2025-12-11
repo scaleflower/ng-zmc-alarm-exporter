@@ -233,6 +233,7 @@ class AlarmTransformer:
             "severity": self.severity_mapping.get_severity(alarm.effective_severity),
 
             # ZMC 标识
+            "alarm_id": str(alarm.alarm_inst_id) if alarm.alarm_inst_id else str(alarm.event_inst_id),
             "event_id": str(alarm.event_inst_id),
             "alarm_code": str(alarm.alarm_code),
 
@@ -282,22 +283,43 @@ class AlarmTransformer:
         summary = alarm.alarm_name or f"ZMC Alert {alarm.alarm_code}"
         annotations["summary"] = summary
 
-        # 描述
-        description_parts = []
+        # Description - bullet list format for better readability
+        # Use "  \n" (two spaces + newline) for Markdown line breaks in DingTalk
+        description_lines = []
+
+        # 1. Detail info
         if alarm.detail_info:
-            description_parts.append(alarm.detail_info)
+            detail = alarm.detail_info.replace("\n", " ").replace("\r", "").strip()
+            if len(detail) > 200:
+                detail = detail[:197] + "..."
+            description_lines.append(f"• Detail: {detail}")
+
+        # 2. Location info (each on separate line)
         if alarm.host_name:
-            description_parts.append(f"Host: {alarm.host_name}")
+            description_lines.append(f"• Host: {alarm.host_name}")
         if alarm.host_ip:
-            description_parts.append(f"IP: {alarm.host_ip}")
+            description_lines.append(f"• IP: {alarm.host_ip}")
         if alarm.app_name:
-            description_parts.append(f"Application: {alarm.app_name}")
+            description_lines.append(f"• App: {alarm.app_name}")
         if alarm.business_domain:
-            description_parts.append(f"Domain: {alarm.business_domain}")
+            description_lines.append(f"• Domain: {alarm.business_domain}")
 
-        annotations["description"] = " | ".join(description_parts) if description_parts else summary
+        # 3. Fault reason
+        if alarm.fault_reason:
+            description_lines.append(f"• Reason: {alarm.fault_reason}")
 
-        # 故障原因
+        # 4. Suggestion
+        if alarm.deal_suggest:
+            suggest = alarm.deal_suggest
+            if len(suggest) > 150:
+                suggest = suggest[:147] + "..."
+            description_lines.append(f"• Suggestion: {suggest}")
+
+        # Join with "  \n" - two trailing spaces force Markdown line break
+        # Add leading newline so "Description:" and first bullet are on separate lines
+        annotations["description"] = "  \n" + "  \n".join(description_lines) if description_lines else summary
+
+        # 故障原因 (保留单独字段，供其他用途)
         if alarm.fault_reason:
             annotations["fault_reason"] = alarm.fault_reason
 
