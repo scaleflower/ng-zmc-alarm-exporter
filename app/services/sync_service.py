@@ -562,8 +562,11 @@ class SyncService:
             # 2. 同步状态变更
             results["status_changes"] = await self.sync_status_changes(batch_id)
 
-            # 3. 心跳保活
-            results["heartbeat"] = await self.sync_heartbeat(batch_id)
+            # 3. 心跳保活（仅在启用时执行）
+            if settings.sync.heartbeat_enabled:
+                results["heartbeat"] = await self.sync_heartbeat(batch_id)
+            else:
+                results["heartbeat"] = {"skipped": True, "reason": "heartbeat_enabled=False"}
 
             # 4. 清理静默
             results["silences_cleanup"] = await self.cleanup_silences(batch_id)

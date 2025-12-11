@@ -104,7 +104,11 @@ class SyncServiceConfig(BaseSettings):
 
     enabled: bool = Field(default=True, description="是否启用同步服务")
     scan_interval: int = Field(default=60, description="扫描间隔(秒)")
-    heartbeat_interval: int = Field(default=120, description="心跳间隔(秒)")
+    heartbeat_enabled: bool = Field(
+        default=False,
+        description="是否启用心跳保活机制。关闭后告警只推送一次，状态变更时才再次推送"
+    )
+    heartbeat_interval: int = Field(default=120, description="心跳间隔(秒)，仅在heartbeat_enabled=True时生效")
     batch_size: int = Field(default=100, description="批处理大小")
     sync_on_startup: bool = Field(default=True, description="启动时同步历史告警")
     history_hours: int = Field(default=24, description="历史回溯时长(小时)")
