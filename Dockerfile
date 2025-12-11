@@ -2,7 +2,7 @@
 # Multi-stage build for smaller image size
 
 # Stage 1: Build dependencies
-FROM python:3.11-slim as builder
+FROM m.daocloud.io/docker.io/library/python:3.11-slim AS builder
 
 WORKDIR /build
 
@@ -17,7 +17,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --user -r requirements.txt
 
 # Stage 2: Runtime image
-FROM python:3.11-slim
+FROM m.daocloud.io/docker.io/library/python:3.11-slim
 
 LABEL maintainer="ZMC Team"
 LABEL description="ZMC Alarm Exporter - Sync ZMC alarms to Prometheus Alertmanager"
@@ -29,8 +29,9 @@ RUN groupadd -r exporter && useradd -r -g exporter exporter
 WORKDIR /app
 
 # Install Oracle Instant Client dependencies
+# Note: libaio1 is renamed to libaio1t64 in Debian trixie
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libaio1 \
+    libaio1t64 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
