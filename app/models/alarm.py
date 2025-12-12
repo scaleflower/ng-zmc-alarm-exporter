@@ -117,8 +117,16 @@ class ZMCAlarm(BaseModel):
 
     @property
     def effective_alert_name(self) -> str:
-        """有效告警名称"""
-        return self.alarm_name or f"ZMC_ALARM_{self.alarm_code}"
+        """
+        有效告警名称
+
+        格式与 ZMC 前台一致: 告警名称 ( 告警码 )
+        例如: KPI Missing(Lost) ( 31041 )
+        """
+        if self.alarm_name:
+            return f"{self.alarm_name} ( {self.alarm_code} )"
+        else:
+            return f"ZMC_ALARM ( {self.alarm_code} )"
 
     def get_resolved_time(self) -> Optional[datetime]:
         """获取告警恢复时间"""
