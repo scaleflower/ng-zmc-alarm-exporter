@@ -354,10 +354,10 @@ async def get_config(
 
         return [
             ConfigItem(
-                config_key=row["CONFIG_KEY"],
-                config_value=row["CONFIG_VALUE"],
-                config_group=row["CONFIG_GROUP"],
-                description=row.get("DESCRIPTION")
+                config_key=row["config_key"],
+                config_value=row["config_value"],
+                config_group=row["config_group"],
+                description=row.get("description")
             )
             for row in rows
         ]
