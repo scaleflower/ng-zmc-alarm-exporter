@@ -405,3 +405,99 @@ async def get_database_status() -> Dict[str, Any]:
             "dsn": settings.oracle.dsn,
             "error": str(e)
         }
+
+
+@router.get("/statistics/alarms")
+async def get_alarm_statistics() -> Dict[str, Any]:
+    """
+    获取 ZMC 告警统计信息
+
+    统计未关闭告警的数量，按级别分组显示。
+    """
+    try:
+        # 告警级别名称映射
+        level_names = {
+            "1": {"en": "Critical", "cn": "严重", "prometheus": "critical"},
+            "2": {"en": "Error", "cn": "重要", "prometheus": "error"},
+            "3": {"en": "Warning", "cn": "次要", "prometheus": "warning"},
+            "4": {"en": "Info", "cn": "警告", "prometheus": "info"},
+            "0": {"en": "Undefined", "cn": "未定义", "prometheus": "warning"},
+        }
+
+        # 查询未关闭告警统计 (ALARM_STATE = 'U')
+        alarm_query = """
+            SELECT
+                TO_CHAR(ALARM_LEVEL) as ALARM_LEVEL,
+                COUNT(*) as CNT
+            FROM NM_ALARM_CDR
+            WHERE ALARM_STATE = 'U'
+            GROUP BY ALARM_LEVEL
+            ORDER BY ALARM_LEVEL
+        """
+        alarm_rows = oracle_client.execute_query(alarm_query)
+
+        # 构建告警统计
+        by_level = []
+        total_active = 0
+        for row in alarm_rows:
+            level = str(row["ALARM_LEVEL"])
+            count = row["CNT"]
+            total_active += count
+
+            level_info = level_names.get(level, {"en": "Unknown", "cn": "未知", "prometheus": "unknown"})
+            by_level.append({
+                "level": level,
+                "level_name": f"{level_info['en']} ({level_info['cn']})",
+                "prometheus_severity": level_info["prometheus"],
+                "count": count
+            })
+
+        # 查询同步状态统计
+        sync_query = """
+            SELECT
+                SYNC_STATUS,
+                COUNT(*) as CNT
+            FROM NM_ALARM_SYNC_STATUS
+            GROUP BY SYNC_STATUS
+        """
+        sync_rows = oracle_client.execute_query(sync_query)
+
+        sync_status = {}
+        for row in sync_rows:
+            sync_status[row["SYNC_STATUS"]] = row["CNT"]
+
+        # 查询最近同步时间
+        last_sync_query = """
+            SELECT MAX(LAST_PUSH_TIME) as LAST_PUSH
+            FROM NM_ALARM_SYNC_STATUS
+        """
+        last_sync_rows = oracle_client.execute_query(last_sync_query)
+        last_push_time = None
+        if last_sync_rows and last_sync_rows[0]["LAST_PUSH"]:
+            last_push_time = str(last_sync_rows[0]["LAST_PUSH"])
+
+        return {
+            "active_alarms": {
+                "total": total_active,
+                "by_level": by_level
+            },
+            "sync_status": {
+                "firing": sync_status.get("FIRING", 0),
+                "resolved": sync_status.get("RESOLVED", 0),
+                "silenced": sync_status.get("SILENCED", 0),
+                "total": sum(sync_status.values())
+            },
+            "last_push_time": last_push_time,
+            "config": {
+                "sync_alarm_levels": settings.sync.alarm_levels,
+                "severity_filter": settings.sync.severity_filter or "(all)",
+                "scan_interval": settings.sync.scan_interval
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get alarm statistics: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get statistics: {str(e)}"
+        )
