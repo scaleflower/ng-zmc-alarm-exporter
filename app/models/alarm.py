@@ -101,8 +101,19 @@ class ZMCAlarm(BaseModel):
 
     @property
     def effective_host(self) -> str:
-        """有效主机标识"""
-        return self.host_ip or self.host_name or f"device_{self.device_id or 'unknown'}"
+        """
+        有效主机标识
+
+        格式与 ZMC 前台一致: 主机名@IP (如 pr-ocs02@10.25.177.3)
+        """
+        if self.host_name and self.host_ip:
+            return f"{self.host_name}@{self.host_ip}"
+        elif self.host_ip:
+            return self.host_ip
+        elif self.host_name:
+            return self.host_name
+        else:
+            return f"device_{self.device_id or 'unknown'}"
 
     @property
     def effective_alert_name(self) -> str:
