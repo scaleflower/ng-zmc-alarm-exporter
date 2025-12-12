@@ -275,22 +275,22 @@ class AlarmTransformer:
             alarm: ZMC 告警对象
 
         Returns:
-            (英文级别, 中文级别) 元组
+            (英文级别, ZMC级别代码) 元组
         """
         level = str(alarm.effective_severity)
         severity_en = self.severity_mapping.get_severity(level)
 
-        # ZMC 告警级别中文映射
-        severity_cn_map = {
-            "1": "严重",
-            "2": "重要",
-            "3": "次要",
-            "4": "警告",
-            "0": "未定义"
+        # ZMC alarm level description (English only to avoid encoding issues)
+        severity_desc_map = {
+            "1": "Critical",
+            "2": "Major",
+            "3": "Minor",
+            "4": "Warning",
+            "0": "Undefined"
         }
-        severity_cn = severity_cn_map.get(level, "未知")
+        severity_desc = severity_desc_map.get(level, "Unknown")
 
-        return severity_en, severity_cn
+        return severity_en, severity_desc
 
     def _build_annotations(self, alarm: ZMCAlarm) -> Dict[str, str]:
         """
@@ -304,22 +304,22 @@ class AlarmTransformer:
         """
         annotations = {}
 
-        # 获取告警级别显示信息
-        severity_en, severity_cn = self._get_severity_display(alarm)
+        # Get severity display info
+        severity_en, severity_desc = self._get_severity_display(alarm)
 
-        # 摘要 - 包含告警级别
+        # Summary
         summary = alarm.alarm_name or f"ZMC Alert {alarm.alarm_code}"
         annotations["summary"] = summary
 
-        # 告警级别注解
-        annotations["severity_level"] = f"{severity_en.upper()} ({severity_cn})"
+        # Severity level annotation (English only)
+        annotations["severity_level"] = f"{severity_en.upper()} ({severity_desc})"
 
         # Description - bullet list format for better readability
         # Use "  \n" (two spaces + newline) for Markdown line breaks in DingTalk
         description_lines = []
 
         # 0. Severity level (first item)
-        description_lines.append(f"• Severity: {severity_en.upper()} ({severity_cn})")
+        description_lines.append(f"• Severity: {severity_en.upper()} ({severity_desc})")
 
         # 1. Detail info
         if alarm.detail_info:
