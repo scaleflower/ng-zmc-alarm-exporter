@@ -148,6 +148,27 @@ class OracleClient:
         finally:
             self._pool.release(conn)
 
+    def health_check(self) -> bool:
+        """
+        检查数据库连接健康状态
+
+        Returns:
+            True 如果连接正常，False 如果连接失败
+        """
+        try:
+            if self._pool is None:
+                return False
+
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1 FROM DUAL")
+                cursor.fetchone()
+                cursor.close()
+            return True
+        except Exception as e:
+            logger.error(f"Database health check failed: {e}")
+            return False
+
     def execute_query(
         self,
         sql: str,
