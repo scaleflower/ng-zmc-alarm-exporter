@@ -344,6 +344,103 @@ install() {
     log_info "  3. Start service: $0 start"
 }
 
+# 更新版本 (Direct Run)
+update() {
+    log_info "Updating $APP_NAME..."
+
+    cd "$APP_HOME"
+
+    # 检查是否是 git 仓库
+    if [ ! -d ".git" ]; then
+        log_error "Not a git repository. Cannot update."
+        return 1
+    fi
+
+    # 检查是否有未提交的更改
+    if ! git diff-index --quiet HEAD -- 2>/dev/null; then
+        log_warn "You have uncommitted changes. Please commit or stash them first."
+        git status --short
+        return 1
+    fi
+
+    # 拉取最新代码
+    log_info "Pulling latest code from remote..."
+    if ! git pull origin main; then
+        log_error "Failed to pull latest code"
+        return 1
+    fi
+
+    # 检查是否需要更新依赖
+    if git diff HEAD@{1} --name-only 2>/dev/null | grep -q "requirements.txt"; then
+        log_info "requirements.txt changed, updating dependencies..."
+        setup_venv
+    fi
+
+    # 重启服务
+    log_info "Restarting service..."
+    restart
+
+    log_info "Update completed!"
+    log_info "Run '$0 logs' to check the logs"
+}
+
+# 更新版本 (Docker)
+update_docker() {
+    log_info "Updating $APP_NAME (Docker mode)..."
+
+    cd "$APP_HOME"
+
+    # 检查是否是 git 仓库
+    if [ ! -d ".git" ]; then
+        log_error "Not a git repository. Cannot update."
+        return 1
+    fi
+
+    # 检查 docker-compose 是否可用
+    if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null 2>&1; then
+        log_error "docker-compose not found. Please install Docker Compose."
+        return 1
+    fi
+
+    # 确定使用 docker-compose 还是 docker compose
+    local compose_cmd="docker-compose"
+    if ! command -v docker-compose &> /dev/null; then
+        compose_cmd="docker compose"
+    fi
+
+    # 检查是否有未提交的更改
+    if ! git diff-index --quiet HEAD -- 2>/dev/null; then
+        log_warn "You have uncommitted changes. Please commit or stash them first."
+        git status --short
+        return 1
+    fi
+
+    # 拉取最新代码
+    log_info "Pulling latest code from remote..."
+    if ! git pull origin main; then
+        log_error "Failed to pull latest code"
+        return 1
+    fi
+
+    # 停止容器
+    log_info "Stopping containers..."
+    $compose_cmd down
+
+    # 重新构建
+    log_info "Rebuilding containers..."
+    if ! $compose_cmd build; then
+        log_error "Failed to build containers"
+        return 1
+    fi
+
+    # 启动容器
+    log_info "Starting containers..."
+    $compose_cmd up -d
+
+    log_info "Update completed!"
+    log_info "Run '$compose_cmd logs -f' to check the logs"
+}
+
 # 显示帮助
 usage() {
     cat << EOF
@@ -352,14 +449,16 @@ Usage: $0 <command> [options]
 ZMC Alarm Exporter - Sync ZMC alarms to Prometheus Alertmanager
 
 Commands:
-    start       Start the service
-    stop        Stop the service
-    restart     Restart the service
-    status      Show service status and health
-    logs [n]    Show last n lines of log (default: 100)
-    logs-f      Follow log output in real-time
-    install     Install dependencies and setup environment
-    help        Show this help message
+    start         Start the service
+    stop          Stop the service
+    restart       Restart the service
+    status        Show service status and health
+    logs [n]      Show last n lines of log (default: 100)
+    logs-f        Follow log output in real-time
+    install       Install dependencies and setup environment
+    update        Pull latest code and restart service (Direct Run)
+    update-docker Pull latest code and rebuild Docker containers
+    help          Show this help message
 
 Examples:
     $0 start              # Start the service
@@ -368,6 +467,8 @@ Examples:
     $0 status             # Check service status
     $0 logs 200           # Show last 200 lines of log
     $0 logs-f             # Follow log output
+    $0 update             # Update to latest version (Direct Run)
+    $0 update-docker      # Update to latest version (Docker)
 
 Environment Variables:
     SERVER_HOST     Listen address (default: 0.0.0.0)
@@ -407,6 +508,12 @@ case "${1:-}" in
         ;;
     install)
         install
+        ;;
+    update)
+        update
+        ;;
+    update-docker)
+        update_docker
         ;;
     help|--help|-h)
         usage

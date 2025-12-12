@@ -6,13 +6,15 @@ REM Usage:
 REM   start.bat <command>
 REM
 REM Commands:
-REM   start       Start the service
-REM   stop        Stop the service
-REM   restart     Restart the service
-REM   status      Show service status
-REM   logs        Show recent logs
-REM   install     Install dependencies
-REM   help        Show help message
+REM   start         Start the service
+REM   stop          Stop the service
+REM   restart       Restart the service
+REM   status        Show service status
+REM   logs          Show recent logs
+REM   install       Install dependencies
+REM   update        Pull latest code and restart (Direct Run)
+REM   update-docker Pull latest code and rebuild Docker
+REM   help          Show help message
 REM ============================================================================
 
 setlocal enabledelayedexpansion
@@ -57,6 +59,8 @@ if /i "%~1"=="restart" goto restart_service
 if /i "%~1"=="status" goto show_status
 if /i "%~1"=="logs" goto show_logs
 if /i "%~1"=="install" goto install_deps
+if /i "%~1"=="update" goto update_service
+if /i "%~1"=="update-docker" goto update_docker
 if /i "%~1"=="help" goto usage
 if /i "%~1"=="--help" goto usage
 if /i "%~1"=="-h" goto usage
@@ -234,6 +238,114 @@ echo   3. Start service: %~nx0 start
 goto end
 
 REM ============================================================================
+REM Update Service (Direct Run)
+REM ============================================================================
+:update_service
+echo [%date% %time%] [INFO] Updating %APP_NAME%...
+
+cd /d "%SCRIPT_DIR%"
+
+REM Check if git repository
+if not exist ".git" (
+    echo [ERROR] Not a git repository. Cannot update.
+    goto error_exit
+)
+
+REM Check for uncommitted changes
+git diff-index --quiet HEAD -- 2>nul
+if errorlevel 1 (
+    echo [WARN] You have uncommitted changes. Please commit or stash them first.
+    git status --short
+    goto error_exit
+)
+
+REM Pull latest code
+echo [INFO] Pulling latest code from remote...
+git pull origin main
+if errorlevel 1 (
+    echo [ERROR] Failed to pull latest code
+    goto error_exit
+)
+
+REM Check if requirements.txt changed
+git diff HEAD@{1} --name-only 2>nul | findstr "requirements.txt" >nul 2>&1
+if not errorlevel 1 (
+    echo [INFO] requirements.txt changed, updating dependencies...
+    call :install_deps
+)
+
+REM Restart service
+echo [INFO] Restarting service...
+call :restart_service
+
+echo [INFO] Update completed!
+echo [INFO] Run '%~nx0 logs' to check the logs
+goto end
+
+REM ============================================================================
+REM Update Service (Docker)
+REM ============================================================================
+:update_docker
+echo [%date% %time%] [INFO] Updating %APP_NAME% (Docker mode)...
+
+cd /d "%SCRIPT_DIR%"
+
+REM Check if git repository
+if not exist ".git" (
+    echo [ERROR] Not a git repository. Cannot update.
+    goto error_exit
+)
+
+REM Check for docker-compose
+where docker-compose >nul 2>&1
+if errorlevel 1 (
+    docker compose version >nul 2>&1
+    if errorlevel 1 (
+        echo [ERROR] docker-compose not found. Please install Docker Compose.
+        goto error_exit
+    )
+    set "COMPOSE_CMD=docker compose"
+) else (
+    set "COMPOSE_CMD=docker-compose"
+)
+
+REM Check for uncommitted changes
+git diff-index --quiet HEAD -- 2>nul
+if errorlevel 1 (
+    echo [WARN] You have uncommitted changes. Please commit or stash them first.
+    git status --short
+    goto error_exit
+)
+
+REM Pull latest code
+echo [INFO] Pulling latest code from remote...
+git pull origin main
+if errorlevel 1 (
+    echo [ERROR] Failed to pull latest code
+    goto error_exit
+)
+
+REM Stop containers
+echo [INFO] Stopping containers...
+%COMPOSE_CMD% down
+
+REM Rebuild containers
+echo [INFO] Rebuilding containers...
+%COMPOSE_CMD% build
+if errorlevel 1 (
+    echo [ERROR] Failed to build containers
+    goto error_exit
+)
+
+REM Start containers
+echo [INFO] Starting containers...
+%COMPOSE_CMD% up -d
+
+echo [INFO] Update completed!
+echo [INFO] Run '%COMPOSE_CMD% logs -f' to check the logs
+goto end
+
+REM ============================================================================
 REM Check if Service is Running
 REM ============================================================================
 :check_running
@@ -255,13 +367,15 @@ echo.
 echo ZMC Alarm Exporter - Sync ZMC alarms to Prometheus Alertmanager
 echo.
 echo Commands:
-echo     start       Start the service
-echo     stop        Stop the service
-echo     restart     Restart the service
-echo     status      Show service status and health
-echo     logs [n]    Show last n lines of log (default: 100)
-echo     install     Install dependencies and setup environment
-echo     help        Show this help message
+echo     start         Start the service
+echo     stop          Stop the service
+echo     restart       Restart the service
+echo     status        Show service status and health
+echo     logs [n]      Show last n lines of log (default: 100)
+echo     install       Install dependencies and setup environment
+echo     update        Pull latest code and restart service (Direct Run)
+echo     update-docker Pull latest code and rebuild Docker containers
+echo     help          Show this help message
 echo.
 echo Examples:
 echo     %~nx0 start              # Start the service
@@ -269,6 +383,8 @@ echo     %~nx0 stop               # Stop the service
 echo     %~nx0 restart            # Restart the service
 echo     %~nx0 status             # Check service status
 echo     %~nx0 logs 200           # Show last 200 lines of log
+echo     %~nx0 update             # Update to latest version (Direct Run)
+echo     %~nx0 update-docker      # Update to latest version (Docker)
 echo.
 echo Environment Variables (set in .env):
 echo     SERVER_HOST     Listen address (default: 0.0.0.0)
