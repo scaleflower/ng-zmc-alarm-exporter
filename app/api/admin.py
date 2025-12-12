@@ -720,8 +720,8 @@ async def get_alarm_statistics() -> Dict[str, Any]:
         by_level = []
         total_active = 0
         for row in alarm_rows:
-            level = str(row["ALARM_LEVEL"])
-            count = row["CNT"]
+            level = str(row["alarm_level"])
+            count = row["cnt"]
             total_active += count
 
             level_info = level_names.get(level, {"en": "Unknown", "cn": "未知", "prometheus": "unknown"})
@@ -744,7 +744,7 @@ async def get_alarm_statistics() -> Dict[str, Any]:
 
         sync_status = {}
         for row in sync_rows:
-            sync_status[row["SYNC_STATUS"]] = row["CNT"]
+            sync_status[row["sync_status"]] = row["cnt"]
 
         # 查询最近同步时间
         last_sync_query = """
@@ -753,8 +753,8 @@ async def get_alarm_statistics() -> Dict[str, Any]:
         """
         last_sync_rows = oracle_client.execute_query(last_sync_query)
         last_push_time = None
-        if last_sync_rows and last_sync_rows[0]["LAST_PUSH"]:
-            last_push_time = str(last_sync_rows[0]["LAST_PUSH"])
+        if last_sync_rows and last_sync_rows[0]["last_push"]:
+            last_push_time = str(last_sync_rows[0]["last_push"])
 
         return {
             "active_alarms": {
