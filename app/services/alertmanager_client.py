@@ -4,6 +4,7 @@ Alertmanager API 客户端
 与 Prometheus Alertmanager 进行交互，推送告警和管理静默规则。
 """
 
+import json
 import logging
 import time
 from typing import List, Optional, Dict, Any
@@ -42,7 +43,8 @@ class AlertmanagerClient:
                 timeout=httpx.Timeout(self.config.timeout),
                 auth=auth,
                 headers={
-                    "Content-Type": "application/json",
+                    # 明确指定 charset=utf-8 以确保中文字符正确传输
+                    "Content-Type": "application/json; charset=utf-8",
                     "User-Agent": "zmc-alarm-exporter/1.0"
                 },
                 # 禁用代理，直接连接 Alertmanager（不从环境变量读取代理）
@@ -76,9 +78,15 @@ class AlertmanagerClient:
         client = await self._get_client()
         last_error = None
 
+        # 手动序列化 JSON，确保中文字符不被转义
+        # 使用 ensure_ascii=False 保留原始 Unicode 字符
+        content = None
+        if json_data is not None:
+            content = json.dumps(json_data, ensure_ascii=False).encode("utf-8")
+
         for attempt in range(self.config.retry_count):
             try:
-                response = await client.request(method, url, json=json_data)
+                response = await client.request(method, url, content=content)
                 return response
 
             except httpx.TimeoutException as e:
