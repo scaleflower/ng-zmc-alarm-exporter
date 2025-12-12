@@ -731,10 +731,12 @@ class OracleClient:
         sql = """
         INSERT INTO NM_ALARM_SYNC_STATUS (
             SYNC_ID, ALARM_INST_ID, EVENT_INST_ID, SYNC_STATUS,
-            ZMC_ALARM_STATE, CREATE_TIME, UPDATE_TIME
+            ZMC_ALARM_STATE, CREATE_TIME, UPDATE_TIME,
+            PUSH_COUNT, LAST_PUSH_TIME
         ) VALUES (
             SEQ_ALARM_SYNC_STATUS.NEXTVAL, :alarm_inst_id, :event_inst_id,
-            :sync_status, :zmc_alarm_state, SYSTIMESTAMP, SYSTIMESTAMP
+            :sync_status, :zmc_alarm_state, SYSTIMESTAMP, SYSTIMESTAMP,
+            1, SYSTIMESTAMP
         )
         """
         return self.execute_update(sql, {

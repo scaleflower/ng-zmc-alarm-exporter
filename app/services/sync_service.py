@@ -520,7 +520,7 @@ class SyncService:
         event_inst_id = alarm_data["event_inst_id"]
         sync_id = alarm_data["sync_id"]
 
-        # 构建恢复告警
+        # 构建恢复告警 - 使用完整的告警数据以保证 RESOLVED 消息包含所有详细信息
         resolved_time = (
             alarm_data.get("reset_date") or
             alarm_data.get("clear_date") or
@@ -528,16 +528,9 @@ class SyncService:
             datetime.now(timezone.utc)
         )
 
-        alarm = ZMCAlarm(
-            event_inst_id=event_inst_id,
-            alarm_code=alarm_data["alarm_code"],
-            alarm_level=alarm_data.get("alarm_level"),
-            reset_flag="0",
-            event_time=alarm_data.get("event_time"),
-            alarm_name=alarm_data.get("alarm_name"),
-            host_name=alarm_data.get("host_name"),
-            host_ip=alarm_data.get("host_ip"),
-        )
+        # 使用 _build_alarm_from_data 构建完整的告警对象
+        alarm = self._build_alarm_from_data(alarm_data)
+        alarm.reset_flag = "0"  # 标记为已恢复
 
         alert = self.transformer.transform_to_prometheus(
             alarm,
@@ -592,17 +585,9 @@ class SyncService:
         event_inst_id = alarm_data["event_inst_id"]
         sync_id = alarm_data["sync_id"]
 
-        # 构建告警对象
-        alarm = ZMCAlarm(
-            event_inst_id=event_inst_id,
-            alarm_code=alarm_data["alarm_code"],
-            alarm_level=alarm_data.get("alarm_level"),
-            reset_flag="0",  # 标记为已恢复
-            event_time=alarm_data.get("event_time"),
-            alarm_name=alarm_data.get("alarm_name"),
-            host_name=alarm_data.get("host_name"),
-            host_ip=alarm_data.get("host_ip"),
-        )
+        # 使用 _build_alarm_from_data 构建完整的告警对象
+        alarm = self._build_alarm_from_data(alarm_data)
+        alarm.reset_flag = "0"  # 标记为已恢复
 
         # 步骤1: 推送 resolved 告警到 Alertmanager → 关闭 OpsGenie 告警
         clear_time = alarm_data.get("clear_date") or datetime.now(timezone.utc)

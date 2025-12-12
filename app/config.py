@@ -223,7 +223,7 @@ class StaticLabels(BaseSettings):
         extra="ignore"
     )
 
-    source: str = Field(default="zmc", description="告警来源标识")
+    source: str = Field(default="BSS_OSS_L1", description="告警来源标识，可通过 LABEL_SOURCE 环境变量配置")
     cluster: Optional[str] = Field(default=None, description="集群名称")
     datacenter: Optional[str] = Field(default=None, description="数据中心")
 

@@ -267,6 +267,31 @@ class AlarmTransformer:
 
         return labels
 
+    def _get_severity_display(self, alarm: ZMCAlarm) -> tuple:
+        """
+        获取告警级别的显示信息
+
+        Args:
+            alarm: ZMC 告警对象
+
+        Returns:
+            (英文级别, 中文级别) 元组
+        """
+        level = str(alarm.effective_severity)
+        severity_en = self.severity_mapping.get_severity(level)
+
+        # ZMC 告警级别中文映射
+        severity_cn_map = {
+            "1": "严重",
+            "2": "重要",
+            "3": "次要",
+            "4": "警告",
+            "0": "未定义"
+        }
+        severity_cn = severity_cn_map.get(level, "未知")
+
+        return severity_en, severity_cn
+
     def _build_annotations(self, alarm: ZMCAlarm) -> Dict[str, str]:
         """
         构建 Prometheus 注解
@@ -279,13 +304,22 @@ class AlarmTransformer:
         """
         annotations = {}
 
-        # 摘要
+        # 获取告警级别显示信息
+        severity_en, severity_cn = self._get_severity_display(alarm)
+
+        # 摘要 - 包含告警级别
         summary = alarm.alarm_name or f"ZMC Alert {alarm.alarm_code}"
         annotations["summary"] = summary
+
+        # 告警级别注解
+        annotations["severity_level"] = f"{severity_en.upper()} ({severity_cn})"
 
         # Description - bullet list format for better readability
         # Use "  \n" (two spaces + newline) for Markdown line breaks in DingTalk
         description_lines = []
+
+        # 0. Severity level (first item)
+        description_lines.append(f"• Severity: {severity_en.upper()} ({severity_cn})")
 
         # 1. Detail info
         if alarm.detail_info:
