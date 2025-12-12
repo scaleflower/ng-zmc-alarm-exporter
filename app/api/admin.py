@@ -31,7 +31,7 @@ from app.services.alertmanager_client import alertmanager_client
 from app.services.oracle_client import oracle_client
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(default_response_class=UnicodeJSONResponse)
 
 
 # ========== Admin 首页 ==========
@@ -700,7 +700,7 @@ async def get_database_status() -> Dict[str, Any]:
         }
 
 
-@router.get("/statistics/alarms", response_class=UnicodeJSONResponse)
+@router.get("/statistics/alarms")
 async def get_alarm_statistics() -> Dict[str, Any]:
     """
     获取 ZMC 告警统计信息
