@@ -4,13 +4,26 @@
 提供配置管理和运维操作端点。
 """
 
+import json
 import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Body
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
+
+
+class UnicodeJSONResponse(JSONResponse):
+    """支持中文的 JSON 响应"""
+    def render(self, content: Any) -> bytes:
+        return json.dumps(
+            content,
+            ensure_ascii=False,
+            allow_nan=False,
+            indent=None,
+            separators=(",", ":"),
+        ).encode("utf-8")
 
 from app.config import settings
 from app.services.sync_service import sync_service
@@ -687,7 +700,7 @@ async def get_database_status() -> Dict[str, Any]:
         }
 
 
-@router.get("/statistics/alarms")
+@router.get("/statistics/alarms", response_class=UnicodeJSONResponse)
 async def get_alarm_statistics() -> Dict[str, Any]:
     """
     获取 ZMC 告警统计信息
