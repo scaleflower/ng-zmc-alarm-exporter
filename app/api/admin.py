@@ -9,6 +9,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Body
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from app.config import settings
@@ -18,6 +19,285 @@ from app.services.oracle_client import oracle_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+# ========== Admin 首页 ==========
+
+@router.get("", response_class=HTMLResponse)
+@router.get("/", response_class=HTMLResponse)
+async def admin_index() -> str:
+    """
+    Admin API 首页
+
+    展示所有可用的管理接口和链接（HTML 页面）。
+    """
+    base_url = "/api/v1/admin"
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>ZMC Alarm Exporter - Admin</title>
+        <style>
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+            body {{
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+                min-height: 100vh;
+                color: #e0e0e0;
+                padding: 20px;
+            }}
+            .container {{ max-width: 1200px; margin: 0 auto; }}
+            h1 {{
+                text-align: center;
+                color: #00d4ff;
+                margin-bottom: 10px;
+                font-size: 2em;
+            }}
+            .subtitle {{
+                text-align: center;
+                color: #888;
+                margin-bottom: 30px;
+            }}
+            .section {{
+                background: rgba(255,255,255,0.05);
+                border-radius: 12px;
+                padding: 20px;
+                margin-bottom: 20px;
+                border: 1px solid rgba(255,255,255,0.1);
+            }}
+            .section h2 {{
+                color: #00d4ff;
+                margin-bottom: 15px;
+                font-size: 1.2em;
+                border-bottom: 1px solid rgba(255,255,255,0.1);
+                padding-bottom: 10px;
+            }}
+            .api-list {{ list-style: none; }}
+            .api-item {{
+                display: flex;
+                align-items: center;
+                padding: 12px 15px;
+                margin: 8px 0;
+                background: rgba(255,255,255,0.03);
+                border-radius: 8px;
+                transition: all 0.2s;
+            }}
+            .api-item:hover {{
+                background: rgba(0,212,255,0.1);
+                transform: translateX(5px);
+            }}
+            .method {{
+                display: inline-block;
+                padding: 4px 10px;
+                border-radius: 4px;
+                font-size: 0.75em;
+                font-weight: bold;
+                margin-right: 15px;
+                min-width: 60px;
+                text-align: center;
+            }}
+            .method-get {{ background: #28a745; color: white; }}
+            .method-post {{ background: #ffc107; color: #333; }}
+            .method-put {{ background: #17a2b8; color: white; }}
+            .method-delete {{ background: #dc3545; color: white; }}
+            .api-info {{ flex: 1; }}
+            .api-name {{
+                font-weight: 600;
+                color: #fff;
+                margin-bottom: 4px;
+            }}
+            .api-desc {{ font-size: 0.85em; color: #888; }}
+            .api-link {{
+                color: #00d4ff;
+                text-decoration: none;
+                font-size: 0.85em;
+                padding: 6px 12px;
+                border: 1px solid #00d4ff;
+                border-radius: 4px;
+                transition: all 0.2s;
+            }}
+            .api-link:hover {{
+                background: #00d4ff;
+                color: #1a1a2e;
+            }}
+            .api-link.disabled {{
+                color: #666;
+                border-color: #666;
+                cursor: not-allowed;
+            }}
+            .quick-links {{
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px;
+                justify-content: center;
+                margin-bottom: 30px;
+            }}
+            .quick-link {{
+                background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+                color: #1a1a2e;
+                padding: 10px 20px;
+                border-radius: 25px;
+                text-decoration: none;
+                font-weight: 600;
+                transition: all 0.2s;
+            }}
+            .quick-link:hover {{
+                transform: scale(1.05);
+                box-shadow: 0 4px 15px rgba(0,212,255,0.4);
+            }}
+            .footer {{
+                text-align: center;
+                margin-top: 30px;
+                color: #666;
+                font-size: 0.85em;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🔧 ZMC Alarm Exporter</h1>
+            <p class="subtitle">Admin API Dashboard</p>
+
+            <div class="quick-links">
+                <a href="{base_url}/statistics/alarms" class="quick-link">📊 告警统计</a>
+                <a href="{base_url}/database/status" class="quick-link">🗄️ 数据库状态</a>
+                <a href="{base_url}/alertmanager/status" class="quick-link">🔔 Alertmanager</a>
+                <a href="{base_url}/alertmanager/alerts" class="quick-link">⚠️ 活跃告警</a>
+                <a href="/health" class="quick-link">💚 健康检查</a>
+            </div>
+
+            <div class="section">
+                <h2>📊 统计信息</h2>
+                <ul class="api-list">
+                    <li class="api-item">
+                        <span class="method method-get">GET</span>
+                        <div class="api-info">
+                            <div class="api-name">告警统计</div>
+                            <div class="api-desc">查看 ZMC 未关闭告警数量（按级别分组）和同步状态</div>
+                        </div>
+                        <a href="{base_url}/statistics/alarms" class="api-link">调用</a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="section">
+                <h2>📡 状态监控</h2>
+                <ul class="api-list">
+                    <li class="api-item">
+                        <span class="method method-get">GET</span>
+                        <div class="api-info">
+                            <div class="api-name">数据库状态</div>
+                            <div class="api-desc">查看 Oracle 数据库连接状态和连接池信息</div>
+                        </div>
+                        <a href="{base_url}/database/status" class="api-link">调用</a>
+                    </li>
+                    <li class="api-item">
+                        <span class="method method-get">GET</span>
+                        <div class="api-info">
+                            <div class="api-name">Alertmanager 状态</div>
+                            <div class="api-desc">查看 Alertmanager 健康状态、版本和集群信息</div>
+                        </div>
+                        <a href="{base_url}/alertmanager/status" class="api-link">调用</a>
+                    </li>
+                    <li class="api-item">
+                        <span class="method method-get">GET</span>
+                        <div class="api-info">
+                            <div class="api-name">Alertmanager 活跃告警</div>
+                            <div class="api-desc">查看 Alertmanager 中的所有活跃告警</div>
+                        </div>
+                        <a href="{base_url}/alertmanager/alerts" class="api-link">调用</a>
+                    </li>
+                    <li class="api-item">
+                        <span class="method method-get">GET</span>
+                        <div class="api-info">
+                            <div class="api-name">Alertmanager 静默规则</div>
+                            <div class="api-desc">查看 Alertmanager 中的所有静默规则</div>
+                        </div>
+                        <a href="{base_url}/alertmanager/silences" class="api-link">调用</a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="section">
+                <h2>⚙️ 配置管理</h2>
+                <ul class="api-list">
+                    <li class="api-item">
+                        <span class="method method-get">GET</span>
+                        <div class="api-info">
+                            <div class="api-name">获取配置列表</div>
+                            <div class="api-desc">从数据库读取配置项（可选 ?group=xxx 过滤）</div>
+                        </div>
+                        <a href="{base_url}/config" class="api-link">调用</a>
+                    </li>
+                    <li class="api-item">
+                        <span class="method method-put">PUT</span>
+                        <div class="api-info">
+                            <div class="api-name">更新配置项</div>
+                            <div class="api-desc">PUT {base_url}/config/{{config_key}} - Body: {{"config_value": "新值"}}</div>
+                        </div>
+                        <span class="api-link disabled">需用工具调用</span>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="section">
+                <h2>🎮 服务控制</h2>
+                <ul class="api-list">
+                    <li class="api-item">
+                        <span class="method method-post">POST</span>
+                        <div class="api-info">
+                            <div class="api-name">控制同步服务</div>
+                            <div class="api-desc">POST {base_url}/service/control - Body: {{"action": "start|stop|restart"}}</div>
+                        </div>
+                        <span class="api-link disabled">需用工具调用</span>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="section">
+                <h2>🧹 数据清理</h2>
+                <ul class="api-list">
+                    <li class="api-item">
+                        <span class="method method-post">POST</span>
+                        <div class="api-info">
+                            <div class="api-name">清理旧日志</div>
+                            <div class="api-desc">POST {base_url}/cleanup/old-logs?days=30</div>
+                        </div>
+                        <span class="api-link disabled">需用工具调用</span>
+                    </li>
+                    <li class="api-item">
+                        <span class="method method-post">POST</span>
+                        <div class="api-info">
+                            <div class="api-name">清理已解决告警</div>
+                            <div class="api-desc">POST {base_url}/cleanup/resolved-alarms?days=7</div>
+                        </div>
+                        <span class="api-link disabled">需用工具调用</span>
+                    </li>
+                    <li class="api-item">
+                        <span class="method method-delete">DELETE</span>
+                        <div class="api-info">
+                            <div class="api-name">删除静默规则</div>
+                            <div class="api-desc">DELETE {base_url}/alertmanager/silences/{{silence_id}}</div>
+                        </div>
+                        <span class="api-link disabled">需用工具调用</span>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="footer">
+                ZMC Alarm Exporter v{settings.app_version} |
+                <a href="/health" style="color: #00d4ff;">Health</a> |
+                <a href="/metrics" style="color: #00d4ff;">Metrics</a>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+    return html_content
 
 
 # ========== 响应模型 ==========
