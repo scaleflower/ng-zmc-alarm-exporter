@@ -99,8 +99,8 @@ echo [INFO] Starting uvicorn server on %SERVER_HOST%:%SERVER_PORT%...
 REM Start in background
 start "%APP_NAME%" /b cmd /c ""%VENV_DIR%\Scripts\python.exe" -m uvicorn app.main:app --host %SERVER_HOST% --port %SERVER_PORT% --workers %SERVER_WORKERS% >> "%LOG_FILE%" 2>&1"
 
-REM Wait for startup
-timeout /t 3 /nobreak >nul
+REM Wait for startup (10 seconds for Oracle pool initialization)
+timeout /t 10 /nobreak >nul
 
 REM Check if started successfully
 call :check_running

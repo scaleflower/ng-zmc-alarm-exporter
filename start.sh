@@ -212,8 +212,8 @@ start() {
     local pid=$!
     echo $pid > "$PID_FILE"
 
-    # 等待启动
-    sleep 2
+    # 等待启动 (10秒，用于 Oracle 连接池初始化)
+    sleep 10
 
     if is_running; then
         log_info "Service started successfully (PID: $pid)"
