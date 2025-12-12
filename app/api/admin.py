@@ -15,14 +15,14 @@ from pydantic import BaseModel
 
 
 class UnicodeJSONResponse(JSONResponse):
-    """支持中文的 JSON 响应"""
+    """支持中文的格式化 JSON 响应"""
     def render(self, content: Any) -> bytes:
         return json.dumps(
             content,
             ensure_ascii=False,
             allow_nan=False,
-            indent=None,
-            separators=(",", ":"),
+            indent=2,
+            separators=(", ", ": "),
         ).encode("utf-8")
 
 from app.config import settings
