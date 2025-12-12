@@ -321,10 +321,7 @@ class AlarmTransformer:
         # 0. Severity level (first item)
         description_lines.append(f"• Severity: {severity_en.upper()} ({severity_desc})")
 
-        # 1. Alarm Code info
-        description_lines.append(f"• Alarm Code: {alarm.alarm_code}")
-
-        # 2. Detail info
+        # 1. Detail info (Alarm Code is already in alertname)
         if alarm.detail_info:
             detail = alarm.detail_info.replace("\n", " ").replace("\r", "").strip()
             if len(detail) > 200:
