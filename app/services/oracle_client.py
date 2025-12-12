@@ -554,9 +554,12 @@ class OracleClient:
         - U -> A: 自动恢复
         - U -> M: 手工清除
         - U -> C: 已确认
+
+        Returns full alarm details for RESOLVED messages to include in notifications.
         """
         sql = """
         SELECT
+            -- Sync status info
             s.SYNC_ID,
             s.ALARM_INST_ID,
             s.EVENT_INST_ID,
@@ -565,7 +568,7 @@ class OracleClient:
             s.SILENCE_ID,
             s.PUSH_COUNT,
 
-            -- 当前 CDR 状态
+            -- CDR status info
             c.ALARM_STATE AS NEW_ZMC_STATE,
             c.ALARM_CODE,
             c.ALARM_LEVEL,
@@ -575,30 +578,48 @@ class OracleClient:
             c.CLEAR_REASON,
             c.TOTAL_ALARM,
 
-            -- 最新事件详情
+            -- Event details (full info for RESOLVED messages)
             e.EVENT_INST_ID AS LATEST_EVENT_ID,
             e.EVENT_TIME,
+            e.CREATE_DATE AS EVENT_CREATE_DATE,
             e.DETAIL_INFO,
+            e.RES_INST_TYPE,
+            e.RES_INST_ID,
+            e.APP_ENV_ID,
+            e.TASK_TYPE,
+            e.DATA_1, e.DATA_2, e.DATA_3, e.DATA_4, e.DATA_5,
+            e.DATA_6, e.DATA_7, e.DATA_8, e.DATA_9, e.DATA_10,
 
-            -- 告警码详情
+            -- Alarm code library info
             acl.ALARM_NAME,
+            acl.FAULT_REASON,
+            acl.DEAL_SUGGEST,
+            acl.WARN_LEVEL AS DEFAULT_WARN_LEVEL,
 
-            -- 主机信息
+            -- Device/Host info
             d.DEVICE_NAME AS HOST_NAME,
             d.IP_ADDR AS HOST_IP,
+            d.DEVICE_MODEL,
 
-            -- 应用信息
+            -- App environment info
             ae.APP_NAME,
+            ae.USERNAME AS APP_USER,
 
-            -- 业务域信息
-            sd.DOMAIN_NAME AS BUSINESS_DOMAIN
+            -- Business domain info
+            sd.DOMAIN_NAME AS BUSINESS_DOMAIN,
+            CASE sd.DOMAIN_TYPE
+                WHEN 'A' THEN 'Production'
+                WHEN 'T' THEN 'Test'
+                WHEN 'D' THEN 'DR'
+                ELSE 'Unknown'
+            END AS ENVIRONMENT
 
         FROM NM_ALARM_SYNC_STATUS s
 
-        -- 关联告警汇总表（核心）
+        -- Join CDR table (core)
         JOIN NM_ALARM_CDR c ON s.ALARM_INST_ID = c.ALARM_INST_ID
 
-        -- 获取最新事件记录
+        -- Get latest event record for full details
         LEFT JOIN (
             SELECT e1.*
             FROM NM_ALARM_EVENT e1
@@ -613,20 +634,20 @@ class OracleClient:
             AND c.APP_ENV_ID = e.APP_ENV_ID
             AND c.RES_INST_ID = e.RES_INST_ID
 
-        -- 关联告警码库
+        -- Join alarm code library
         LEFT JOIN NM_ALARM_CODE_LIB acl ON c.ALARM_CODE = acl.ALARM_CODE
 
-        -- 关联应用环境
+        -- Join app environment
         LEFT JOIN APP_ENV ae ON c.APP_ENV_ID = ae.APP_ENV_ID
 
-        -- 关联设备表
+        -- Join device table
         LEFT JOIN DEVICE d ON ae.DEVICE_ID = d.DEVICE_ID
 
-        -- 关联业务域表
+        -- Join business domain table
         LEFT JOIN SYS_DOMAIN sd ON ae.SYS_DOMAIN_ID = sd.DOMAIN_ID
 
         WHERE s.SYNC_STATUS IN ('FIRING', 'PENDING')
-          AND c.ALARM_STATE != NVL(s.ZMC_ALARM_STATE, 'U')  -- 状态发生变化
+          AND c.ALARM_STATE != NVL(s.ZMC_ALARM_STATE, 'U')  -- Status changed
         """
         return self.execute_query(sql)
 

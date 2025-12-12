@@ -162,22 +162,61 @@ FETCH FIRST :batch_size ROWS ONLY;
 -- 用途: 检测ZMC侧告警状态变化，触发Prometheus端更新
 -- ============================================================================
 -- query_name: get_status_changed_alarms
+-- Description: Query alarms with status changes, including full details for RESOLVED messages
 SELECT
+    -- Sync status info
     s.SYNC_ID,
     s.EVENT_INST_ID,
     s.ALARM_INST_ID,
     s.SYNC_STATUS,
     s.ZMC_ALARM_STATE AS OLD_ZMC_STATE,
+    s.PUSH_COUNT,
+
+    -- CDR status info
     c.ALARM_STATE AS NEW_ZMC_STATE,
     c.RESET_DATE,
     c.CLEAR_DATE,
     c.CONFIRM_DATE,
     c.CLEAR_REASON,
+    c.TOTAL_ALARM,
+
+    -- Event basic info
     e.ALARM_CODE,
     e.ALARM_LEVEL,
+    e.EVENT_TIME,
+    e.CREATE_DATE AS EVENT_CREATE_DATE,
+    e.DETAIL_INFO,
+    e.RES_INST_TYPE,
+    e.RES_INST_ID,
+    e.APP_ENV_ID,
+    e.TASK_TYPE,
+    e.DATA_1, e.DATA_2, e.DATA_3, e.DATA_4, e.DATA_5,
+    e.DATA_6, e.DATA_7, e.DATA_8, e.DATA_9, e.DATA_10,
+
+    -- Alarm code library info
     acl.ALARM_NAME,
+    acl.FAULT_REASON,
+    acl.DEAL_SUGGEST,
+    acl.WARN_LEVEL AS DEFAULT_WARN_LEVEL,
+
+    -- Device/Host info
     d.DEVICE_NAME AS HOST_NAME,
-    d.IP_ADDR AS HOST_IP
+    d.IP_ADDR AS HOST_IP,
+    d.DEVICE_MODEL,
+
+    -- App environment info
+    ae.APP_NAME,
+    ae.USERNAME AS APP_USER,
+
+    -- Business domain info
+    sd.DOMAIN_NAME AS BUSINESS_DOMAIN,
+    CASE sd.DOMAIN_TYPE
+        WHEN 'A' THEN 'Production'
+        WHEN 'T' THEN 'Test'
+        WHEN 'D' THEN 'DR'
+        ELSE 'Unknown'
+    END AS ENVIRONMENT
+
 FROM NM_ALARM_SYNC_STATUS s
 JOIN NM_ALARM_EVENT e ON s.EVENT_INST_ID = e.EVENT_INST_ID
 LEFT JOIN NM_ALARM_CDR c ON e.ALARM_CODE = c.ALARM_CODE
@@ -186,6 +225,7 @@ LEFT JOIN NM_ALARM_CDR c ON e.ALARM_CODE = c.ALARM_CODE
 LEFT JOIN NM_ALARM_CODE_LIB acl ON e.ALARM_CODE = acl.ALARM_CODE
 LEFT JOIN APP_ENV ae ON e.APP_ENV_ID = ae.APP_ENV_ID
 LEFT JOIN DEVICE d ON ae.DEVICE_ID = d.DEVICE_ID
+LEFT JOIN SYS_DOMAIN sd ON ae.SYS_DOMAIN_ID = sd.DOMAIN_ID
 WHERE s.SYNC_STATUS IN ('FIRING', 'PENDING')
   AND c.ALARM_STATE IS NOT NULL
   AND c.ALARM_STATE != NVL(s.ZMC_ALARM_STATE, 'U');
