@@ -4,7 +4,6 @@
 支持从环境变量、配置文件和数据库加载配置。
 """
 
-import os
 from typing import Optional
 from functools import lru_cache
 from pydantic import Field

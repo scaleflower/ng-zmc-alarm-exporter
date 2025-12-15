@@ -6,9 +6,8 @@
 
 import logging
 from typing import List, Optional
-from datetime import datetime
 
-from app.models.alarm import ZMCAlarm, AlarmSyncStatus, AlarmStatistics
+from app.models.alarm import ZMCAlarm, AlarmStatistics
 from app.services.oracle_client import OracleClient, oracle_client
 from app.config import settings
 

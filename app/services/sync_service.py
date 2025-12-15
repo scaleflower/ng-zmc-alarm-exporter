@@ -7,13 +7,11 @@
 import logging
 import asyncio
 import uuid
-from typing import List, Optional
+from typing import Optional
 from datetime import datetime, timezone
-from contextlib import asynccontextmanager
 
 from app.config import settings
 from app.models.alarm import ZMCAlarm
-from app.models.prometheus import PrometheusAlert, PrometheusSilence
 from app.services.oracle_client import OracleClient, oracle_client
 from app.services.alarm_extractor import AlarmExtractor, alarm_extractor
 from app.services.alarm_transformer import AlarmTransformer, alarm_transformer

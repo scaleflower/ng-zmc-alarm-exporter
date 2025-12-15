@@ -8,11 +8,10 @@ import json
 import logging
 import time
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timezone
 
 import httpx
 
-from app.models.prometheus import PrometheusAlert, PrometheusSilence, AlertmanagerStatus
+from app.models.prometheus import PrometheusAlert, PrometheusSilence
 from app.config import AlertmanagerConfig, settings
 
 logger = logging.getLogger(__name__)
