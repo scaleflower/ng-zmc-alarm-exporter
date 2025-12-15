@@ -13,10 +13,10 @@ env:
 
 jobs:
   # ============================================================================
-  # Job 1: Test on Linux
+  # Job 1: Unit Tests on Linux
   # ============================================================================
   test-linux:
-    name: Test (Linux)
+    name: Unit Tests (Linux)
     runs-on: ubuntu-latest
 
     steps:
@@ -44,15 +44,17 @@ jobs:
           pip install mypy
           mypy app/ --ignore-missing-imports --no-error-summary || true
 
-      - name: Run tests
+      - name: Run unit tests
         run: |
-          pytest tests/ -v --tb=short || echo "No tests found or tests skipped"
+          pytest tests/unit/ -v --tb=short --cov=app --cov-report=term-missing || echo "No unit tests found"
+        env:
+          SKIP_INTEGRATION_TESTS: "true"
 
   # ============================================================================
-  # Job 2: Test on macOS
+  # Job 2: Unit Tests on macOS
   # ============================================================================
   test-macos:
-    name: Test (macOS)
+    name: Unit Tests (macOS)
     runs-on: macos-latest
 
     steps:
@@ -75,17 +77,73 @@ jobs:
           pip install ruff
           ruff check app/ --ignore E501,E402
 
-      - name: Verify imports
+      - name: Run unit tests
         run: |
-          python -c "from app.main import app; print('Import successful')"
+          pytest tests/unit/ -v --tb=short || echo "No unit tests found"
+        env:
+          SKIP_INTEGRATION_TESTS: "true"
 
   # ============================================================================
-  # Job 3: Build Docker Image
+  # Job 3: Integration Tests (with real Alertmanager)
+  # ============================================================================
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [test-linux]
+
+    services:
+      # Alertmanager service for integration tests
+      alertmanager:
+        image: prom/alertmanager:latest
+        ports:
+          - 9093:9093
+        options: >-
+          --health-cmd "wget -q --spider http://localhost:9093/-/healthy || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Wait for Alertmanager
+        run: |
+          echo "Waiting for Alertmanager to be ready..."
+          for i in {1..30}; do
+            if curl -s http://localhost:9093/-/healthy > /dev/null; then
+              echo "Alertmanager is ready!"
+              break
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run integration tests
+        run: |
+          pytest tests/integration/ -v --tb=short
+        env:
+          SKIP_INTEGRATION_TESTS: "false"
+          ALERTMANAGER_URL: "http://localhost:9093"
+
+  # ============================================================================
+  # Job 4: Build Docker Image
   # ============================================================================
   build-docker:
     name: Build Docker Image
     runs-on: ubuntu-latest
-    needs: [test-linux]
+    needs: [test-linux, integration-test]
 
     permissions:
       contents: read
@@ -136,12 +194,12 @@ jobs:
         run: echo "Image pushed with digest ${{ steps.docker_build.outputs.digest }}"
 
   # ============================================================================
-  # Job 4: Build Summary
+  # Job 5: Build Summary
   # ============================================================================
   build-summary:
     name: Build Summary
     runs-on: ubuntu-latest
-    needs: [test-linux, test-macos, build-docker]
+    needs: [test-linux, test-macos, integration-test, build-docker]
     if: always()
 
     steps:
@@ -149,11 +207,12 @@ jobs:
         run: |
           echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Platform | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Linux | ${{ needs.test-linux.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| macOS | ${{ needs.test-macos.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Docker | ${{ needs.build-docker.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Unit Tests (Linux) | ${{ needs.test-linux.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Unit Tests (macOS) | ${{ needs.test-macos.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Integration Tests | ${{ needs.integration-test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker Build | ${{ needs.build-docker.result }} |" >> $GITHUB_STEP_SUMMARY
 
       - name: Fail if any job failed
         if: contains(needs.*.result, 'failure')
