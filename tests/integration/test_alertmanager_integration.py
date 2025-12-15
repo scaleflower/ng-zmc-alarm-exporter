@@ -31,8 +31,8 @@ class TestAlertmanagerIntegration:
     @pytest.mark.asyncio
     async def test_real_health_check(self, client):
         """测试真实的健康检查"""
-        result = await client.check_health()
-        assert result["healthy"] is True
+        result = await client.health_check()
+        assert result is True
 
     @pytest.mark.asyncio
     async def test_real_push_and_query_alert(self, client):
@@ -62,11 +62,9 @@ class TestAlertmanagerIntegration:
         await asyncio.sleep(1)
 
         # 查询告警
-        query_result = await client.get_alerts()
-        assert query_result["success"] is True
+        alerts = await client.get_alerts()
 
         # 验证告警存在
-        alerts = query_result.get("alerts", [])
         test_alert = next(
             (a for a in alerts if a.get("labels", {}).get("event_id") == "integration-test-001"),
             None
@@ -134,10 +132,11 @@ class TestFullSyncFlow:
             event_inst_id=99999,
             alarm_inst_id=9999,
             alarm_code=9001,
-            alarm_level=1,
+            alarm_level="1",  # String type
             alarm_state="U",
             host_ip="192.168.99.99",
-            alarm_name="Integration Test Alarm"
+            alarm_name="Integration Test Alarm",
+            reset_flag="1"  # Required field
         )
 
         alert = transformer.transform_to_prometheus(alarm)
@@ -146,6 +145,7 @@ class TestFullSyncFlow:
 
         # 场景 2: 告警恢复
         alarm.alarm_state = "A"
+        alarm.reset_flag = "0"
         resolved_alert = transformer.transform_to_prometheus(alarm, resolved=True)
         result = await client.push_single_alert(resolved_alert)
         assert result["success"] is True, "Failed to push RESOLVED alert"

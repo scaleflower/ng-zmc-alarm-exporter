@@ -9,7 +9,6 @@ from datetime import datetime
 from typing import List, Dict, Any
 
 from app.models.alarm import ZMCAlarm
-from app.models.prometheus import PrometheusAlert
 
 
 # ============================================================================
@@ -23,9 +22,9 @@ def sample_alarm() -> ZMCAlarm:
         event_inst_id=12345,
         alarm_inst_id=1000,
         alarm_code=1001,
-        alarm_level=1,
+        alarm_level="1",  # String type
         alarm_state="U",
-        reset_flag="1",
+        reset_flag="1",  # Required field
         event_time=datetime(2024, 1, 15, 10, 30, 0),
         create_date=datetime(2024, 1, 15, 10, 30, 5),
         detail_info="CPU usage exceeded 90%",
@@ -46,8 +45,9 @@ def sample_alarms() -> List[ZMCAlarm]:
             event_inst_id=12345,
             alarm_inst_id=1000,
             alarm_code=1001,
-            alarm_level=1,  # Critical
+            alarm_level="1",  # Critical
             alarm_state="U",
+            reset_flag="1",
             host_ip="192.168.1.100",
             alarm_name="CPU High Usage"
         ),
@@ -55,8 +55,9 @@ def sample_alarms() -> List[ZMCAlarm]:
             event_inst_id=12346,
             alarm_inst_id=1001,
             alarm_code=1002,
-            alarm_level=2,  # Major
+            alarm_level="2",  # Major
             alarm_state="U",
+            reset_flag="1",
             host_ip="192.168.1.101",
             alarm_name="Memory High Usage"
         ),
@@ -64,8 +65,9 @@ def sample_alarms() -> List[ZMCAlarm]:
             event_inst_id=12347,
             alarm_inst_id=1002,
             alarm_code=1003,
-            alarm_level=3,  # Minor
+            alarm_level="3",  # Minor
             alarm_state="U",
+            reset_flag="1",
             host_ip="192.168.1.102",
             alarm_name="Disk Space Low"
         ),
@@ -101,7 +103,7 @@ def db_alarm_row() -> Dict[str, Any]:
         "EVENT_INST_ID": 12345,
         "ALARM_INST_ID": 1000,
         "ALARM_CODE": 1001,
-        "ALARM_LEVEL": 1,
+        "ALARM_LEVEL": "1",
         "ALARM_STATE": "U",
         "RESET_FLAG": "1",
         "EVENT_TIME": datetime(2024, 1, 15, 10, 30, 0),
@@ -160,9 +162,9 @@ def alertmanager_silence_response() -> Dict[str, Any]:
 @pytest.fixture
 def mock_env_vars(monkeypatch):
     """设置测试环境变量"""
-    monkeypatch.setenv("ORACLE_HOST", "localhost")
-    monkeypatch.setenv("ORACLE_PORT", "1521")
-    monkeypatch.setenv("ORACLE_SERVICE", "XEPDB1")
-    monkeypatch.setenv("ORACLE_USER", "test")
-    monkeypatch.setenv("ORACLE_PASSWORD", "test123")
+    monkeypatch.setenv("ZMC_ORACLE_HOST", "localhost")
+    monkeypatch.setenv("ZMC_ORACLE_PORT", "1521")
+    monkeypatch.setenv("ZMC_ORACLE_SERVICE_NAME", "XEPDB1")
+    monkeypatch.setenv("ZMC_ORACLE_USERNAME", "test")
+    monkeypatch.setenv("ZMC_ORACLE_PASSWORD", "test123")
     monkeypatch.setenv("ALERTMANAGER_URL", "http://localhost:9093")
