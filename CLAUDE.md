@@ -4,7 +4,7 @@
 
 ## 部署信息
 
-- **应用部署**: 10.101.1.42 (root/EnablingSoft@2025)
+- **所内测试环境**: 10.101.1.42 (root/EnablingSoft@2025)
 - **Prometheus/Alertmanager**: 10.101.1.79 (root/EnablingSoft@2025)
 - **ZMC Oracle 数据库**:
   - Host: 10.101.1.42
@@ -12,6 +12,30 @@
   - Service: rb
   - User: zmc
   - Password: smart
+
+- **生产环境数据库**: 192.168.123.239
+# ========== Oracle 数据库配置 ==========
+# ZMC Oracle 数据库连接信息
+ZMC_ORACLE_HOST=192.168.123.239
+ZMC_ORACLE_PORT=51015
+ZMC_ORACLE_SERVICE_NAME=zmc
+ZMC_ORACLE_USERNAME=zmc
+ZMC_ORACLE_PASSWORD=Jsmart.868
+ZMC_ORACLE_POOL_MIN=2
+ZMC_ORACLE_POOL_MAX=10
+ZMC_ORACLE_TIMEOUT=30
+
+# ========== Oracle 数据库配置 ==========
+# ZMC Oracle 数据库连接信息
+# ZMC_ORACLE_HOST=10.25.179.28
+# ZMC_ORACLE_PORT=1521
+# ZMC_ORACLE_SERVICE_NAME=zmc
+# ZMC_ORACLE_USERNAME=zmc
+# ZMC_ORACLE_PASSWORD=Jsmart.868
+# ZMC_ORACLE_POOL_MIN=2
+# ZMC_ORACLE_POOL_MAX=10
+# ZMC_ORACLE_TIMEOUT=30
+
 
 ## 架构说明 (v2.0)
 
@@ -63,3 +87,6 @@ NM_ALARM_EVENT (告警流水表)
 ```bash
 sqlplus zmc/smart@10.101.1.42:1522/rb @sql/upgrade_v2_cdr_based.sql
 ```
+- 我已经将应用部署到到生成环境,生产环境数据库的参数是: IP:192.168.123.239 端口51015,用户名:zmc 密码:Jsmart.868
+生产环境ssh登陆参数:
+IP:192.168.123.239 端口51017,用户名:root 密码:-|edhG/e0=

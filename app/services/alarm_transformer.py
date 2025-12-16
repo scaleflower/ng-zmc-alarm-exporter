@@ -311,6 +311,9 @@ class AlarmTransformer:
         summary = alarm.alarm_name or f"ZMC Alert {alarm.alarm_code}"
         annotations["summary"] = summary
 
+        # Report time - 告警推送时间
+        annotations["report_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
         # Severity level annotation (English only)
         annotations["severity_level"] = f"{severity_en.upper()} ({severity_desc})"
 
