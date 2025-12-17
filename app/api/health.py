@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.services.oracle_client import oracle_client
-from app.services.alertmanager_client import alertmanager_client
+from app.services.alert_client_factory import get_alert_client, get_integration_mode
 from app.services.sync_service import sync_service
 
 logger = logging.getLogger(__name__)
@@ -77,23 +77,27 @@ async def health_check(response: Response) -> HealthResponse:
         )
         overall_status = HealthStatus.UNHEALTHY
 
-    # 2. 检查 Alertmanager
+    # 2. 检查告警后端 (Alertmanager 或 OpsGenie)
+    integration_mode = get_integration_mode()
+    component_name = "opsgenie" if integration_mode == "opsgenie" else "alertmanager"
+
     try:
-        am_healthy = await alertmanager_client.health_check()
-        if am_healthy:
-            components["alertmanager"] = ComponentHealth(
+        alert_client = get_alert_client()
+        backend_healthy = await alert_client.health_check()
+        if backend_healthy:
+            components[component_name] = ComponentHealth(
                 status=HealthStatus.HEALTHY,
-                message="Connected"
+                message=f"Connected (mode: {integration_mode})"
             )
         else:
-            components["alertmanager"] = ComponentHealth(
+            components[component_name] = ComponentHealth(
                 status=HealthStatus.DEGRADED,
-                message="Alertmanager unreachable"
+                message=f"{component_name.capitalize()} unreachable"
             )
             if overall_status == HealthStatus.HEALTHY:
                 overall_status = HealthStatus.DEGRADED
     except Exception as e:
-        components["alertmanager"] = ComponentHealth(
+        components[component_name] = ComponentHealth(
             status=HealthStatus.DEGRADED,
             message=str(e)
         )

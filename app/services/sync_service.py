@@ -15,7 +15,7 @@ from app.models.alarm import ZMCAlarm
 from app.services.oracle_client import OracleClient, oracle_client
 from app.services.alarm_extractor import AlarmExtractor, alarm_extractor
 from app.services.alarm_transformer import AlarmTransformer, alarm_transformer
-from app.services.alertmanager_client import AlertmanagerClient, alertmanager_client
+from app.services.alert_client_factory import AlertClient, get_alert_client
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class SyncService:
         db_client: Optional[OracleClient] = None,
         extractor: Optional[AlarmExtractor] = None,
         transformer: Optional[AlarmTransformer] = None,
-        am_client: Optional[AlertmanagerClient] = None
+        am_client: Optional[AlertClient] = None
     ):
         """
         初始化同步服务
@@ -37,12 +37,12 @@ class SyncService:
             db_client: Oracle 客户端
             extractor: 告警抽取器
             transformer: 告警转换器
-            am_client: Alertmanager 客户端
+            am_client: 告警客户端 (Alertmanager 或 OpsGenie)
         """
         self.db = db_client or oracle_client
         self.extractor = extractor or alarm_extractor
         self.transformer = transformer or alarm_transformer
-        self.am_client = am_client or alertmanager_client
+        self.am_client = am_client or get_alert_client()
 
         self._running = False
         self._sync_task: Optional[asyncio.Task] = None

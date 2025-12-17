@@ -77,7 +77,7 @@ class AlertmanagerConfig(BaseSettings):
 
 
 class OpsGenieConfig(BaseSettings):
-    """OpsGenie 直连配置 (备选方案)"""
+    """OpsGenie 直连配置"""
 
     model_config = SettingsConfigDict(
         env_prefix="OPSGENIE_",
@@ -85,11 +85,38 @@ class OpsGenieConfig(BaseSettings):
         extra="ignore"
     )
 
-    enabled: bool = Field(default=False, description="是否启用直连模式")
     api_url: str = Field(default="https://api.opsgenie.com", description="API地址")
-    api_key: Optional[str] = Field(default=None, description="API Key")
+    api_key: str = Field(default="", description="API Key")
     default_team: Optional[str] = Field(default=None, description="默认团队")
-    region: str = Field(default="US", description="服务区域")
+    default_priority: str = Field(default="P3", description="默认优先级 (P1-P5)")
+    timeout: int = Field(default=30, description="请求超时(秒)")
+    retry_count: int = Field(default=3, description="重试次数")
+    retry_interval: int = Field(default=1000, description="重试间隔(毫秒)")
+
+    @property
+    def alerts_url(self) -> str:
+        """告警API端点"""
+        return f"{self.api_url}/v2/alerts"
+
+    @property
+    def heartbeat_url(self) -> str:
+        """心跳API端点"""
+        return f"{self.api_url}/v2/heartbeats"
+
+
+class IntegrationConfig(BaseSettings):
+    """集成模式配置"""
+
+    model_config = SettingsConfigDict(
+        env_prefix="INTEGRATION_",
+        env_file=".env",
+        extra="ignore"
+    )
+
+    mode: str = Field(
+        default="alertmanager",
+        description="集成模式: alertmanager (通过Alertmanager转发) 或 opsgenie (直连OpsGenie)"
+    )
 
 
 class SyncServiceConfig(BaseSettings):
@@ -284,6 +311,7 @@ class Settings(BaseSettings):
     oracle: OracleConfig = Field(default_factory=OracleConfig)
     alertmanager: AlertmanagerConfig = Field(default_factory=AlertmanagerConfig)
     opsgenie: OpsGenieConfig = Field(default_factory=OpsGenieConfig)
+    integration: IntegrationConfig = Field(default_factory=IntegrationConfig)
     sync: SyncServiceConfig = Field(default_factory=SyncServiceConfig)
     silence: SilenceConfig = Field(default_factory=SilenceConfig)
     severity: SeverityMapping = Field(default_factory=SeverityMapping)
