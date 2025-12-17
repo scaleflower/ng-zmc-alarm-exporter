@@ -39,7 +39,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /root/.local /home/exporter/.local
 ENV PATH=/home/exporter/.local/bin:$PATH
 
-# Copy application code
+# Copy application code and version file
+COPY --chown=exporter:exporter VERSION ./VERSION
 COPY --chown=exporter:exporter app/ ./app/
 COPY --chown=exporter:exporter sql/ ./sql/
 

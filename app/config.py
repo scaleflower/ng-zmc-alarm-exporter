@@ -4,10 +4,38 @@
 支持从环境变量、配置文件和数据库加载配置。
 """
 
+import os
+from pathlib import Path
 from typing import Optional
 from functools import lru_cache
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def get_version() -> str:
+    """
+    从 VERSION 文件读取版本号
+
+    查找顺序:
+    1. 项目根目录 (开发环境)
+    2. /app 目录 (Docker 容器)
+    3. 当前工作目录
+    """
+    search_paths = [
+        Path(__file__).parent.parent / "VERSION",  # 项目根目录
+        Path("/app/VERSION"),                       # Docker 容器
+        Path("VERSION"),                            # 当前目录
+    ]
+
+    for version_file in search_paths:
+        if version_file.exists():
+            return version_file.read_text().strip()
+
+    return "0.0.0"  # 默认版本号
+
+
+# 应用版本号 (从 VERSION 文件读取)
+APP_VERSION = get_version()
 
 
 class OracleConfig(BaseSettings):
@@ -304,7 +332,7 @@ class Settings(BaseSettings):
 
     # 应用信息
     app_name: str = Field(default="ZMC Alarm Exporter", description="应用名称")
-    app_version: str = Field(default="1.0.0", description="应用版本")
+    app_version: str = Field(default_factory=lambda: APP_VERSION, description="应用版本")
     debug: bool = Field(default=False, description="调试模式")
 
     # 子配置

@@ -101,3 +101,21 @@ async def root():
         "version": settings.app_version,
         "status": "running"
     }
+
+
+@app.get("/version")
+async def version():
+    """
+    版本信息端点
+
+    返回详细的版本和构建信息。
+    """
+    from app.services.alert_client_factory import get_integration_mode
+
+    return {
+        "version": settings.app_version,
+        "name": settings.app_name,
+        "integration_mode": get_integration_mode(),
+        "sync_enabled": settings.sync.enabled,
+        "debug": settings.debug
+    }
