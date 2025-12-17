@@ -22,6 +22,10 @@ else
 fi
 # 应用名称
 APP_NAME="zmc-alarm-exporter"
+# Docker 镜像名称
+DOCKER_IMAGE="zmc-alarm-exporter"
+# Docker 容器名称
+DOCKER_CONTAINER="zmc-alarm-exporter"
 # PID 文件
 PID_FILE="${APP_HOME}/logs/${APP_NAME}.pid"
 # 日志目录
@@ -441,6 +445,193 @@ update_docker() {
     log_info "Run '$compose_cmd logs -f' to check the logs"
 }
 
+# ============================================================================
+# Docker 容器管理功能
+# ============================================================================
+
+# 获取 Docker 镜像版本
+get_docker_version() {
+    local version_file="${APP_HOME}/VERSION"
+    if [ -f "$version_file" ]; then
+        cat "$version_file" | tr -d '\n'
+    else
+        echo "latest"
+    fi
+}
+
+# 检查 Docker 容器是否运行
+is_docker_running() {
+    docker ps -q -f "name=^${DOCKER_CONTAINER}$" 2>/dev/null | grep -q .
+}
+
+# 启动 Docker 容器
+docker_start() {
+    if is_docker_running; then
+        log_warn "Docker container is already running"
+        docker ps -f "name=^${DOCKER_CONTAINER}$" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+        return 0
+    fi
+
+    # 检查是否存在已停止的容器
+    if docker ps -aq -f "name=^${DOCKER_CONTAINER}$" 2>/dev/null | grep -q .; then
+        log_info "Starting existing container..."
+        docker start "$DOCKER_CONTAINER"
+    else
+        # 获取版本号
+        local version=$(get_docker_version)
+        local image="${DOCKER_IMAGE}:${version}"
+
+        # 检查镜像是否存在
+        if ! docker image inspect "$image" &>/dev/null; then
+            log_error "Docker image not found: $image"
+            log_info "Please build the image first: ./build.sh"
+            return 1
+        fi
+
+        # 检查 .env 文件
+        if [ ! -f "${APP_HOME}/.env" ]; then
+            log_error "Configuration file not found: ${APP_HOME}/.env"
+            log_info "Please copy .env.example to .env and configure it."
+            return 1
+        fi
+
+        # 创建日志目录
+        mkdir -p "${APP_HOME}/logs"
+
+        log_info "Starting Docker container: $image"
+        log_info "Config: ${APP_HOME}/.env"
+        log_info "Logs: ${APP_HOME}/logs/"
+
+        docker run -d \
+            --name "$DOCKER_CONTAINER" \
+            --restart unless-stopped \
+            -p "${PORT}:8080" \
+            -v "${APP_HOME}/.env:/app/.env:ro" \
+            -v "${APP_HOME}/logs:/app/logs" \
+            "$image"
+    fi
+
+    # 等待启动
+    sleep 3
+
+    if is_docker_running; then
+        log_info "Docker container started successfully"
+        docker ps -f "name=^${DOCKER_CONTAINER}$" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+    else
+        log_error "Failed to start Docker container"
+        log_info "Check logs: docker logs $DOCKER_CONTAINER"
+        return 1
+    fi
+}
+
+# 停止 Docker 容器
+docker_stop() {
+    if ! is_docker_running; then
+        log_warn "Docker container is not running"
+        return 0
+    fi
+
+    log_info "Stopping Docker container..."
+    docker stop "$DOCKER_CONTAINER"
+    log_info "Docker container stopped"
+}
+
+# 重启 Docker 容器
+docker_restart() {
+    log_info "Restarting Docker container..."
+    docker_stop
+    sleep 2
+
+    # 删除旧容器以便使用新版本
+    if docker ps -aq -f "name=^${DOCKER_CONTAINER}$" 2>/dev/null | grep -q .; then
+        docker rm "$DOCKER_CONTAINER"
+    fi
+
+    docker_start
+}
+
+# Docker 容器状态
+docker_status() {
+    echo "=== Docker Container Status ==="
+    echo ""
+
+    if is_docker_running; then
+        log_info "Container is running"
+        echo ""
+        docker ps -f "name=^${DOCKER_CONTAINER}$" --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
+
+        # 健康检查
+        echo ""
+        echo "=== Health Check ==="
+        if command -v curl &> /dev/null; then
+            curl -s "http://localhost:${PORT}/health" 2>/dev/null | python3 -m json.tool 2>/dev/null || echo "Unable to fetch health status"
+        fi
+
+        # 版本信息
+        echo ""
+        echo "=== Version Info ==="
+        if command -v curl &> /dev/null; then
+            curl -s "http://localhost:${PORT}/version" 2>/dev/null | python3 -m json.tool 2>/dev/null || echo "Unable to fetch version"
+        fi
+    else
+        log_warn "Container is not running"
+
+        # 检查是否有已停止的容器
+        if docker ps -aq -f "name=^${DOCKER_CONTAINER}$" 2>/dev/null | grep -q .; then
+            echo ""
+            echo "Stopped container found:"
+            docker ps -a -f "name=^${DOCKER_CONTAINER}$" --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"
+        fi
+    fi
+
+    echo ""
+    echo "=== Configuration ==="
+    echo "  Working directory: ${APP_HOME}"
+    echo "  Config file: ${APP_HOME}/.env"
+    echo "  Logs directory: ${APP_HOME}/logs/"
+    echo "  Expected version: $(get_docker_version)"
+}
+
+# Docker 容器日志
+docker_logs() {
+    local lines="${1:-100}"
+
+    if ! docker ps -aq -f "name=^${DOCKER_CONTAINER}$" 2>/dev/null | grep -q .; then
+        log_warn "Container not found: $DOCKER_CONTAINER"
+        return 1
+    fi
+
+    log_info "Showing last $lines lines of Docker logs"
+    docker logs --tail "$lines" "$DOCKER_CONTAINER"
+}
+
+# Docker 容器日志实时跟踪
+docker_logs_follow() {
+    if ! docker ps -aq -f "name=^${DOCKER_CONTAINER}$" 2>/dev/null | grep -q .; then
+        log_warn "Container not found: $DOCKER_CONTAINER"
+        return 1
+    fi
+
+    log_info "Following Docker logs (Ctrl+C to exit)"
+    docker logs -f "$DOCKER_CONTAINER"
+}
+
+# 删除 Docker 容器
+docker_remove() {
+    if is_docker_running; then
+        log_info "Stopping container first..."
+        docker stop "$DOCKER_CONTAINER"
+    fi
+
+    if docker ps -aq -f "name=^${DOCKER_CONTAINER}$" 2>/dev/null | grep -q .; then
+        log_info "Removing container..."
+        docker rm "$DOCKER_CONTAINER"
+        log_info "Container removed"
+    else
+        log_warn "Container not found"
+    fi
+}
+
 # 显示帮助
 usage() {
     cat << EOF
@@ -448,27 +639,42 @@ Usage: $0 <command> [options]
 
 ZMC Alarm Exporter - Sync ZMC alarms to Prometheus Alertmanager
 
-Commands:
-    start         Start the service
-    stop          Stop the service
-    restart       Restart the service
-    status        Show service status and health
-    logs [n]      Show last n lines of log (default: 100)
-    logs-f        Follow log output in real-time
-    install       Install dependencies and setup environment
-    update        Pull latest code and restart service (Direct Run)
-    update-docker Pull latest code and rebuild Docker containers
-    help          Show this help message
+Direct Run Commands (Python):
+    start           Start the service (Python direct)
+    stop            Stop the service
+    restart         Restart the service
+    status          Show service status and health
+    logs [n]        Show last n lines of log (default: 100)
+    logs-f          Follow log output in real-time
+    install         Install dependencies and setup environment
+    update          Pull latest code and restart service
+
+Docker Commands:
+    docker-start    Start Docker container
+    docker-stop     Stop Docker container
+    docker-restart  Restart Docker container (recreates container)
+    docker-status   Show Docker container status and health
+    docker-logs [n] Show last n lines of Docker logs (default: 100)
+    docker-logs-f   Follow Docker logs in real-time
+    docker-remove   Remove Docker container
+    update-docker   Pull latest code and rebuild Docker image
+
+General:
+    help            Show this help message
 
 Examples:
+    # Direct Run Mode (Python)
     $0 start              # Start the service
     $0 stop               # Stop the service
-    $0 restart            # Restart the service
     $0 status             # Check service status
-    $0 logs 200           # Show last 200 lines of log
-    $0 logs-f             # Follow log output
-    $0 update             # Update to latest version (Direct Run)
-    $0 update-docker      # Update to latest version (Docker)
+
+    # Docker Mode
+    $0 docker-start       # Start Docker container
+    $0 docker-stop        # Stop Docker container
+    $0 docker-restart     # Restart with new image
+    $0 docker-status      # Check container status
+    $0 docker-logs 200    # Show last 200 lines
+    $0 docker-logs-f      # Follow Docker logs
 
 Environment Variables:
     SERVER_HOST     Listen address (default: 0.0.0.0)
@@ -476,9 +682,17 @@ Environment Variables:
     SERVER_WORKERS  Number of worker processes (default: 1)
 
 Files:
+    Working dir:  $APP_HOME
     PID file:     $PID_FILE
     Log file:     $LOG_FILE
     Config file:  $ENV_FILE
+    Version file: $APP_HOME/VERSION
+
+Docker:
+    Image:        $DOCKER_IMAGE:\$(cat $APP_HOME/VERSION 2>/dev/null || echo latest)
+    Container:    $DOCKER_CONTAINER
+    Mounts:       \$PWD/.env -> /app/.env (ro)
+                  \$PWD/logs -> /app/logs
 
 EOF
 }
@@ -488,6 +702,7 @@ EOF
 # ============================================================================
 
 case "${1:-}" in
+    # Direct Run Commands
     start)
         start
         ;;
@@ -512,9 +727,34 @@ case "${1:-}" in
     update)
         update
         ;;
+
+    # Docker Commands
+    docker-start)
+        docker_start
+        ;;
+    docker-stop)
+        docker_stop
+        ;;
+    docker-restart)
+        docker_restart
+        ;;
+    docker-status)
+        docker_status
+        ;;
+    docker-logs)
+        docker_logs "${2:-100}"
+        ;;
+    docker-logs-f|docker-follow)
+        docker_logs_follow
+        ;;
+    docker-remove|docker-rm)
+        docker_remove
+        ;;
     update-docker)
         update_docker
         ;;
+
+    # Help
     help|--help|-h)
         usage
         ;;
