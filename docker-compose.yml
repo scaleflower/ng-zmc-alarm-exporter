@@ -1,77 +1,25 @@
 # ZMC Alarm Exporter - Docker Compose 配置
 #
-# 说明：
-#   此服务将 ZMC 告警推送到外部 Alertmanager，需要在 .env 中配置 ALERTMANAGER_URL
-#   Alertmanager 和 Prometheus 应由运维团队独立部署和管理
-#
-# 使用方法：
+# 使用方法:
 #   1. 复制 .env.example 为 .env 并配置
 #   2. docker-compose up -d
 #
-
-version: '3.8'
+# 生产环境部署:
+#   1. 将 .env 和 docker-compose.yml 复制到服务器的 /opt/zmc-alarm-exporter/
+#   2. cd /opt/zmc-alarm-exporter && docker-compose up -d
+#
 
 services:
   zmc-alarm-exporter:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: zmc-alarm-exporter:latest
+    image: zmc-alarm-exporter:${VERSION:-latest}
     container_name: zmc-alarm-exporter
     restart: unless-stopped
     ports:
-      - "${SERVER_PORT:-8080}:8080"
-    environment:
-      # 应用配置
-      - DEBUG=${DEBUG:-false}
-
-      # Oracle 数据库配置
-      - ZMC_ORACLE_HOST=${ZMC_ORACLE_HOST}
-      - ZMC_ORACLE_PORT=${ZMC_ORACLE_PORT:-1521}
-      - ZMC_ORACLE_SERVICE_NAME=${ZMC_ORACLE_SERVICE_NAME}
-      - ZMC_ORACLE_USERNAME=${ZMC_ORACLE_USERNAME}
-      - ZMC_ORACLE_PASSWORD=${ZMC_ORACLE_PASSWORD}
-      - ZMC_ORACLE_POOL_MIN=${ZMC_ORACLE_POOL_MIN:-2}
-      - ZMC_ORACLE_POOL_MAX=${ZMC_ORACLE_POOL_MAX:-10}
-      - ZMC_ORACLE_TIMEOUT=${ZMC_ORACLE_TIMEOUT:-30}
-
-      # Alertmanager 配置（必须指向外部 Alertmanager）
-      - ALERTMANAGER_URL=${ALERTMANAGER_URL}
-      - ALERTMANAGER_TIMEOUT=${ALERTMANAGER_TIMEOUT:-30}
-      - ALERTMANAGER_RETRY_COUNT=${ALERTMANAGER_RETRY_COUNT:-3}
-      - ALERTMANAGER_RETRY_INTERVAL=${ALERTMANAGER_RETRY_INTERVAL:-1000}
-
-      # 同步服务配置
-      - SYNC_ENABLED=${SYNC_ENABLED:-true}
-      - SYNC_SCAN_INTERVAL=${SYNC_SCAN_INTERVAL:-60}
-      - SYNC_HEARTBEAT_INTERVAL=${SYNC_HEARTBEAT_INTERVAL:-120}
-      - SYNC_BATCH_SIZE=${SYNC_BATCH_SIZE:-100}
-      - SYNC_SYNC_ON_STARTUP=${SYNC_SYNC_ON_STARTUP:-true}
-      - SYNC_HISTORY_HOURS=${SYNC_HISTORY_HOURS:-24}
-      - SYNC_ALARM_LEVELS=${SYNC_ALARM_LEVELS:-1,2,3,4}
-      - SYNC_SEVERITY_FILTER=${SYNC_SEVERITY_FILTER:-}
-
-      # 告警级别映射
-      - SEVERITY_LEVEL_1=${SEVERITY_LEVEL_1:-critical}
-      - SEVERITY_LEVEL_2=${SEVERITY_LEVEL_2:-error}
-      - SEVERITY_LEVEL_3=${SEVERITY_LEVEL_3:-warning}
-      - SEVERITY_LEVEL_4=${SEVERITY_LEVEL_4:-info}
-
-      # 静默配置
-      - SILENCE_USE_SILENCE_API=${SILENCE_USE_SILENCE_API:-true}
-      - SILENCE_DEFAULT_DURATION_HOURS=${SILENCE_DEFAULT_DURATION_HOURS:-24}
-      - SILENCE_AUTO_REMOVE_ON_CLEAR=${SILENCE_AUTO_REMOVE_ON_CLEAR:-true}
-
-      # 日志配置
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - LOG_FORMAT=${LOG_FORMAT:-json}
-
-      # 静态标签
-      - LABEL_SOURCE=${LABEL_SOURCE:-zmc}
-      - LABEL_CLUSTER=${LABEL_CLUSTER:-}
-      - LABEL_DATACENTER=${LABEL_DATACENTER:-}
-
+      - "8080:8080"
     volumes:
+      # 配置文件挂载 (只读)
+      - ./.env:/app/.env:ro
+      # 日志目录持久化
       - ./logs:/app/logs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health/live"]
@@ -79,3 +27,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
