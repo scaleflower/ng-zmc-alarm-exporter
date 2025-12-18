@@ -71,6 +71,11 @@ def get_alert_client() -> AlertClient:
     """
     根据配置返回对应的告警客户端
 
+    优先级:
+    1. 如果 OPSGENIE_ENABLED=true 且 ALERTMANAGER_ENABLED=false → 使用 OpsGenie
+    2. 如果 ALERTMANAGER_ENABLED=true → 使用 Alertmanager
+    3. 否则根据 INTEGRATION_MODE 决定
+
     Returns:
         AlertClient: 告警客户端实例
     """
@@ -79,10 +84,29 @@ def get_alert_client() -> AlertClient:
     if _alert_client is not None:
         return _alert_client
 
+    # 根据 enabled 标志自动选择模式
+    opsgenie_enabled = settings.opsgenie.enabled
+    alertmanager_enabled = settings.alertmanager.enabled
+
+    # 如果 OpsGenie 启用且 Alertmanager 禁用，使用 OpsGenie
+    if opsgenie_enabled and not alertmanager_enabled:
+        logger.info("Using OpsGenie direct integration mode (OPSGENIE_ENABLED=true, ALERTMANAGER_ENABLED=false)")
+        from app.services.opsgenie_client import OpsGenieClient
+        _alert_client = OpsGenieClient()
+        return _alert_client
+
+    # 如果 Alertmanager 启用，使用 Alertmanager
+    if alertmanager_enabled:
+        logger.info("Using Alertmanager integration mode (ALERTMANAGER_ENABLED=true)")
+        from app.services.alertmanager_client import AlertmanagerClient
+        _alert_client = AlertmanagerClient()
+        return _alert_client
+
+    # 回退到 INTEGRATION_MODE 配置
     mode = settings.integration.mode.lower()
 
     if mode == "opsgenie":
-        logger.info("Using OpsGenie direct integration mode")
+        logger.info("Using OpsGenie direct integration mode (INTEGRATION_MODE=opsgenie)")
         from app.services.opsgenie_client import OpsGenieClient
         _alert_client = OpsGenieClient()
     else:
@@ -111,9 +135,26 @@ def get_integration_mode() -> str:
     """
     获取当前集成模式
 
+    优先级:
+    1. 如果 OPSGENIE_ENABLED=true 且 ALERTMANAGER_ENABLED=false → 'opsgenie'
+    2. 如果 ALERTMANAGER_ENABLED=true → 'alertmanager'
+    3. 否则根据 INTEGRATION_MODE 决定
+
     Returns:
         str: 'alertmanager' 或 'opsgenie'
     """
+    opsgenie_enabled = settings.opsgenie.enabled
+    alertmanager_enabled = settings.alertmanager.enabled
+
+    # 如果 OpsGenie 启用且 Alertmanager 禁用，使用 OpsGenie
+    if opsgenie_enabled and not alertmanager_enabled:
+        return "opsgenie"
+
+    # 如果 Alertmanager 启用，使用 Alertmanager
+    if alertmanager_enabled:
+        return "alertmanager"
+
+    # 回退到 INTEGRATION_MODE 配置
     return settings.integration.mode.lower()
 
 

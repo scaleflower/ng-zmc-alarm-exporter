@@ -505,12 +505,14 @@ class OpsGenieClient:
         """
         健康检查
 
+        通过获取告警列表来验证 API key 和连接（兼容 Team API Key）。
+
         Returns:
             是否健康
         """
         try:
-            # 通过获取 account info 来验证 API key 和连接
-            url = f"{self.config.api_url}/v2/account"
+            # 使用告警 API 端点验证连接（Team API Key 有此权限）
+            url = f"{self.config.alerts_url}?limit=1"
             client = await self._get_client()
             response = await client.get(url)
             return response.status_code == 200

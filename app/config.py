@@ -79,6 +79,7 @@ class AlertmanagerConfig(BaseSettings):
         extra="ignore"
     )
 
+    enabled: bool = Field(default=True, description="是否启用Alertmanager集成")
     url: str = Field(default="http://localhost:9093", description="Alertmanager API地址")
     api_version: str = Field(default="v2", description="API版本")
     auth_enabled: bool = Field(default=False, description="是否启用认证")
@@ -113,6 +114,7 @@ class OpsGenieConfig(BaseSettings):
         extra="ignore"
     )
 
+    enabled: bool = Field(default=False, description="是否启用OpsGenie直连")
     api_url: str = Field(default="https://api.opsgenie.com", description="API地址")
     api_key: str = Field(default="", description="API Key")
     default_team: Optional[str] = Field(default=None, description="默认团队")
